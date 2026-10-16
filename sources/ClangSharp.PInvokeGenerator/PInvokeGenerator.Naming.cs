@@ -69,6 +69,8 @@ public sealed partial class PInvokeGenerator
         return nameString;
     }
 
+    private static string GetCursorMangledName(Decl decl) => decl.Handle.Mangling.CString;
+
     private static ReadOnlySpan<char> StripCursorNameTagPrefix(ReadOnlySpan<char> name, scoped ref string? nameString)
     {
         if (name.StartsWith("enum ", StringComparison.Ordinal))

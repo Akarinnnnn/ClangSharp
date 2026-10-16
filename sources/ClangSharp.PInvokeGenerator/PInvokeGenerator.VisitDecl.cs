@@ -610,6 +610,19 @@ public partial class PInvokeGenerator
             return;
         }
 
+        if (IsCurrentFunctionBodyGenerated(functionDecl))
+        {
+            AddDiagnostic(DiagnosticLevel.Info, $"Function body (mangled name: {GetCursorMangledName(functionDecl)})" +
+                $" has alreday been generated. Skipping.", functionDecl);
+            return;
+        }
+        else
+        {
+            var added = _bodyEmittedFunctionMangledNames.Add(GetCursorMangledName(functionDecl));
+            Debug.Assert(added, $"Function {GetCursorMangledName(functionDecl)} has been already added to generated set, but predcate reported false. " +
+                $"Location: {functionDecl.Location.ToString().NormalizePath()}");
+        }
+
         var name = GetRemappedCursorName(functionDecl);
 
         var cxxMethodDecl = functionDecl as CXXMethodDecl;
@@ -1168,11 +1181,11 @@ public partial class PInvokeGenerator
         }
         else if (generateCompatibleCode)
         {
-            code.WriteIndented("fixed (");
+            code.BeginFixedStatment();
             code.Write(contextType);
             code.Write("* pField = &");
             code.Write(contextName);
-            code.WriteLine(')');
+            code.EndFixedStatment();
             code.WriteBlockStart();
             code.WriteIndented("return ref pField->");
             code.Write(escapedName);

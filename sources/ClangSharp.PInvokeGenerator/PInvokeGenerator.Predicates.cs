@@ -605,6 +605,45 @@ public sealed partial class PInvokeGenerator
         }
     }
 
+    private bool IsCurrentFunctionBodyGenerated(FunctionDecl funcDecl)
+    {
+        return _bodyEmittedFunctionMangledNames.Contains(GetCursorMangledName(funcDecl));
+    }
+
+    private static bool IsIntegralOperatesEnumStmt(BinaryOperator binOp)
+    {
+        if (binOp.IsRelationalOp || binOp.IsEqualityOp || binOp.IsBitwiseOp || binOp.IsAssignmentOp)
+        {
+            Expr lhsWritten = GetExprAsWritten(binOp.LHS, true),
+                rhsWritten = GetExprAsWritten(binOp.RHS, true);
+
+            return lhsWritten.Type.IsEnumeralType != rhsWritten.Type.IsEnumeralType;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    private static bool IsIntegralNarrowingCastStmt(Expr expr)
+    {
+        if (expr is not CastExpr cast || cast.CastKind != CX_CastKind.CX_CK_IntegralCast)
+        {
+            return false;
+        }
+
+        var exprType = cast.Type;
+        var subExprType = cast.SubExpr.IgnoreParenLValueCasts.Type;
+
+        // checks for both expr are integer
+        if (exprType.IsIntegerType != subExprType.IsIntegerType != false)
+        {
+            return false;
+        }
+
+        return exprType.SizeOf < subExprType.SizeOf;
+    }
+
     private bool IsBaseExcluded(CXXRecordDecl cxxRecordDecl, CXXRecordDecl baseCxxRecordDecl, CXXBaseSpecifier cxxBaseSpecifier, out string baseFieldName)
     {
         baseFieldName = GetAnonymousName(cxxBaseSpecifier, "Base");
@@ -883,7 +922,7 @@ public sealed partial class PInvokeGenerator
             else if (templateSpecializationType.TemplateName.AsTemplateDecl is TemplateDecl templateDecl)
             {
                 // We exclude InjectedClassNameType here to avoid infinite recursion.
-                if ((templateDecl.TemplatedDecl is TypeDecl typeDecl) && (typeDecl.TypeForDecl is not InjectedClassNameType ))
+                if ((templateDecl.TemplatedDecl is TypeDecl typeDecl) && (typeDecl.TypeForDecl is not InjectedClassNameType))
                 {
                     return IsType(cursor, typeDecl.TypeForDecl, out value);
                 }

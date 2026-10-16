@@ -351,10 +351,17 @@ public partial class PInvokeGenerator
                 }
             }
 
+            var isPointerInit = false;
             if (varDecl == firstValueDecl)
             {
                 var type = varDecl.Type;
                 var typeName = GetRemappedTypeName(varDecl, context: null, type, out _);
+
+                if (IsType<PointerType>(varDecl, type) && varDecl.HasInit)
+                {
+                    isPointerInit = true;
+                    outputBuilder.BeginFixedStatment();
+                }
 
                 outputBuilder.Write(typeName);
 
@@ -383,6 +390,11 @@ public partial class PInvokeGenerator
                 else
                 {
                     Visit(init);
+                }
+
+                if (isPointerInit)
+                {
+                    outputBuilder.EndFixedStatment();
                 }
             }
 

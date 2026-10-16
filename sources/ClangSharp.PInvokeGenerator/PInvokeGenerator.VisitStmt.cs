@@ -49,7 +49,18 @@ public partial class PInvokeGenerator
         // directly, so emit the underlying boolean instead.
         var isLogical = binaryOperator.IsLogicalOp;
 
-        VisitBinaryOperatorOperand(binaryOperator.LHS, isAdditive, isLogical);
+        // C/C++ allow direct cmp, bitwise, and assignment ops between C style `enum` and intergal types
+        // by implicitly adding casts to integral to both expressions.
+        // C# does not preform such implicit cast, we have to cast ourselves
+        // see example CSteamID::InstancedSet() in steamclientpublic.h
+        var isIntegralOperatesEnum = IsIntegralOperatesEnumStmt(binaryOperator);
+
+        // sometimes C++ allow implicit narrowing from u64 to u32
+        // see CSteamID::FullSet() in steamclientpublic.h
+        var assignmentRhsIsIntegralNarrowingCast = binaryOperator.IsAssignmentOp
+            && IsIntegralNarrowingCastStmt(binaryOperator.RHS);
+
+        VisitBinaryOperatorOperand(binaryOperator.LHS, isAdditive, isLogical, isIntegralOperatesEnum);
         outputBuilder.Write(' ');
         outputBuilder.Write(binaryOperator.OpcodeStr);
         outputBuilder.Write(' ');
@@ -104,13 +115,14 @@ public partial class PInvokeGenerator
         }
         else
         {
-            VisitBinaryOperatorOperand(binaryOperator.RHS, isAdditive, isLogical);
+            VisitBinaryOperatorOperand(binaryOperator.RHS, isAdditive, isLogical,
+                isIntegralOperatesEnum || assignmentRhsIsIntegralNarrowingCast);
         }
 
         StopCSharpCode();
     }
 
-    private void VisitBinaryOperatorOperand(Expr operand, bool isAdditive, bool isLogical)
+    private void VisitBinaryOperatorOperand(Expr operand, bool isAdditive, bool isLogical, bool isCSharpCastRequired)
     {
         if (isAdditive && IsTypeVoidPointer(operand, operand.Type))
         {
@@ -118,9 +130,17 @@ public partial class PInvokeGenerator
             StopCSharpCode();
         }
 
-        if (isLogical && (operand is ImplicitCastExpr cast) && (cast.CastKind is CX_CK_IntegralCast or CX_CK_BooleanToSignedIntegral) && (cast.SubExprAsWritten.Type.CanonicalType.Kind == CXType_Bool))
+        // following branches looking bad... refactors needed
+        if (!isCSharpCastRequired && !isLogical && (operand.IgnoreParens is ImplicitCastExpr))
         {
-            Visit(cast.SubExprAsWritten);
+            Visit(GetExprAsWritten(operand, false));
+            return;
+        }
+
+        if (isLogical && (operand.IgnoreParens is ImplicitCastExpr cast) && (cast.CastKind is CX_CK_IntegralCast or CX_CK_BooleanToSignedIntegral)
+                && (cast.SubExprAsWritten.Type.CanonicalType.Kind == CXType_Bool))
+        {
+            Visit(GetExprAsWritten(operand, false));
             return;
         }
 
@@ -1520,9 +1540,14 @@ public partial class PInvokeGenerator
 
             default:
             {
-                if (IsStmtAsWritten<DeclRefExpr>(subExpr, out var declRefExpr, removeParens: true) && (declRefExpr.Decl is EnumConstantDecl))
+                if (IsStmtAsWritten<DeclRefExpr>(subExpr, out var declRefExpr, removeParens: true) && declRefExpr.Type.IsEnumeralType)
                 {
-                    ForEnumConstantDecl(implicitCastExpr);
+                    ForEnumDecl(implicitCastExpr);
+                }
+                else if (implicitCastExpr.CastKind is CX_CK_IntegralCast)
+                {
+                    // unlike C++, C# does not implicitly apply narrowing cast
+                    EmitParenthesizedExpression(implicitCastExpr, outputBuilder, subExpr.IgnoreParens);
                 }
                 else
                 {
@@ -1543,14 +1568,24 @@ public partial class PInvokeGenerator
             }
         }
 
-        void ForEnumConstantDecl(ImplicitCastExpr implicitCastExpr)
+        StopCSharpCode();
+
+        void ForEnumDecl(ImplicitCastExpr implicitCastExpr)
         {
             var subExpr = implicitCastExpr.SubExprAsWritten;
 
-            if (IsPrevContextStmt<BinaryOperator>(out var binaryOperator, out _) && ((binaryOperator.Opcode == CXBinaryOperator_EQ) || (binaryOperator.Opcode == CXBinaryOperator_NE)))
+            if (IsPrevContextStmt<BinaryOperator>(out var binaryOperator, out _))
             {
-                Visit(subExpr);
-                subExpr = null;
+                if (IsIntegralOperatesEnumStmt(binaryOperator))
+                {
+                    // comparing C# enum with integral types requires a cast to integral type
+                    // keep `subExpr` for paren emission 
+                }
+                else
+                {
+                    Visit(subExpr);
+                    subExpr = null;
+                }
             }
             else if (IsPrevContextStmt<CaseStmt>(out _, out _))
             {
@@ -1583,19 +1618,23 @@ public partial class PInvokeGenerator
 
             if (subExpr is not null)
             {
-                var type = implicitCastExpr.Type;
-
-                var typeName = GetRemappedTypeName(implicitCastExpr, context: null, type, out _);
-
-                outputBuilder.Write('(');
-                outputBuilder.Write(typeName);
-                outputBuilder.Write(')');
-
-                ParenthesizeStmt(subExpr);
+                EmitParenthesizedExpression(implicitCastExpr, outputBuilder, subExpr);
             }
         }
 
-        StopCSharpCode();
+        void EmitParenthesizedExpression(ImplicitCastExpr implicitCastExpr, CSharpOutputBuilder outputBuilder, Expr subExpr)
+        {
+            var type = implicitCastExpr.Type;
+
+            var typeName = GetRemappedTypeName(implicitCastExpr, context: null, type, out _);
+            Debug.Assert(!string.IsNullOrEmpty(typeName));
+
+            outputBuilder.Write('(');
+            outputBuilder.Write(typeName);
+            outputBuilder.Write(')');
+
+            ParenthesizeStmt(subExpr);
+        }
     }
 
     private void VisitImplicitValueInitExpr(ImplicitValueInitExpr implicitValueInitExpr)

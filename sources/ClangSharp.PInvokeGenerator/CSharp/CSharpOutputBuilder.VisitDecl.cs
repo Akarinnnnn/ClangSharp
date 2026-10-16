@@ -30,6 +30,13 @@ internal partial class CSharpOutputBuilder : IOutputBuilder
         IsUncheckedContext = false;
     }
 
+    public void BeginFixedStatment() => Write("fixed (");
+    public void EndFixedStatment()
+    {
+        WriteLine(")");
+        NeedsSemicolon = false;
+    }
+
     public void BeginValue(in ValueDesc desc)
     {
         if (_generator.Config.GenerateDocIncludes && (desc.Kind == ValueKind.Enumerator))

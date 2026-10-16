@@ -206,7 +206,7 @@ public partial class PInvokeGenerator
                             // [assembly: GeneratedCode] marker is emitted here rather than per type.
 
                             sw.Write("[assembly: ");
-                            sw.Write(GeneratedCodeAttribute);
+                            sw.Write(s_generatedCodeAttribute);
                             sw.WriteLine(']');
                             emittedAssemblyAttribute = true;
                         }
@@ -512,7 +512,7 @@ public partial class PInvokeGenerator
             sw.WriteLine("using System.CodeDom.Compiler;");
             sw.WriteLine();
             sw.Write("[assembly: ");
-            sw.Write(GeneratedCodeAttribute);
+            sw.Write(s_generatedCodeAttribute);
             sw.WriteLine(']');
 
             if (!leaveStreamOpen)
@@ -1741,6 +1741,7 @@ public partial class PInvokeGenerator
                         {
                             sw.Write(")");
                         }
+                        sw.Write(';');
                         sw.WriteLine();
                     }
 

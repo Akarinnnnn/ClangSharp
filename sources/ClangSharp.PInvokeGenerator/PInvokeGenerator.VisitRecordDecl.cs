@@ -1022,9 +1022,10 @@ public partial class PInvokeGenerator
 
             if (_config.GenerateCompatibleCode)
             {
-                body.Write("fixed (");
+                body.BeginFixedStatment();
                 body.Write(escapedCXXRecordDeclName);
-                body.WriteLine("* pThis = &this)");
+                body.WriteLine("* pThis = &this");
+                body.EndFixedStatment();
                 body.WriteBlockStart();
                 body.WriteIndentation();
             }
@@ -2020,11 +2021,11 @@ public partial class PInvokeGenerator
                     _outputBuilder.BeginGetter(_config.GenerateAggressiveInlining, isReadOnly: false);
                     var code = _outputBuilder.BeginCSharpCode();
 
-                    code.WriteIndented("fixed (");
+                    code.BeginFixedStatment();
                     code.Write(arrayTypeName);
                     code.Write("* pThis = &");
                     code.Write(firstFieldName);
-                    code.WriteLine(')');
+                    code.EndFixedStatment();
                     code.WriteBlockStart();
                     code.WriteIndented("return ref pThis[index]");
                     code.WriteSemicolon();

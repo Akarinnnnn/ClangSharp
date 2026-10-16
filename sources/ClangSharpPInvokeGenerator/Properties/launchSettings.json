@@ -13,6 +13,16 @@
       "commandName": "Project",
       "commandLineArgs": "@generate.rsp",
       "workingDirectory": "D:\\repos\\terrafx.interop.windows\\generation\\windows\\um\\winioctl"
+    },
+    "SteamworksPlatform": {
+      "commandName": "Project",
+      "commandLineArgs": "\"@D:\\src_open\\Fage.Steamworks.AnyCPU\\obj\\draft-workspace\\platform-methods.rsp\"",
+      "workingDirectory": "D:\\src_open\\Fage.Steamworks.AnyCPU\\obj\\draft-workspace"
+    },
+    "SteamworksABICommon": {
+      "commandName": "Project",
+      "commandLineArgs": "\"@D:\\src_open\\Fage.Steamworks.AnyCPU\\obj\\draft-workspace\\steam-api-common-types.rsp\"",
+      "workingDirectory": "D:\\src_open\\Fage.Steamworks.AnyCPU\\obj\\draft-workspace"
     }
   }
 }

@@ -47,7 +47,7 @@ public sealed partial class PInvokeGenerator : IDisposable
     // generate-generated-code=type instead annotates each generated top-level type, and =none emits
     // neither. The version is the ClangSharp assembly version (without any prerelease/build metadata) so
     // it is deterministic within a release and only churns the assembly/helper-type baselines on bump.
-    private static readonly string GeneratedCodeAttribute = $"GeneratedCode(\"ClangSharp\", \"{typeof(PInvokeGenerator).Assembly.GetName().Version?.ToString() ?? ""}\")";
+    private static readonly string s_generatedCodeAttribute = $"GeneratedCode(\"ClangSharp\", \"{typeof(PInvokeGenerator).Assembly.GetName().Version?.ToString() ?? ""}\")";
 
     private static readonly Encoding s_defaultStreamWriterEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
     private static readonly SearchValues<char> s_lowercaseAsciiLetters = SearchValues.Create("abcdefghijklmnopqrstuvwxyz");
@@ -62,6 +62,7 @@ public sealed partial class PInvokeGenerator : IDisposable
     private readonly Func<string, Stream> _outputStreamFactory;
     private readonly StringBuilder _fileContentsBuilder;
     private readonly HashSet<string> _visitedFiles;
+    private readonly HashSet<string> _bodyEmittedFunctionMangledNames;
     private readonly List<Diagnostic> _diagnostics;
     private readonly LinkedList<(Cursor Cursor, object? UserData)> _context;
     private readonly Dictionary<string, Guid> _uuidsToGenerate;
@@ -171,6 +172,7 @@ public sealed partial class PInvokeGenerator : IDisposable
             });
             _fileContentsBuilder = new StringBuilder();
             _visitedFiles = new HashSet<string>(StringComparer.Ordinal);
+            _bodyEmittedFunctionMangledNames = new HashSet<string>(StringComparer.Ordinal);
             _diagnostics = [];
             _context = new LinkedList<(Cursor, object?)>();
             _uuidsToGenerate = new Dictionary<string, Guid>(StringComparer.Ordinal);
@@ -790,7 +792,7 @@ public sealed partial class PInvokeGenerator : IDisposable
                 {
                     sw.Write(indentationString);
                     sw.Write('[');
-                    sw.Write(GeneratedCodeAttribute);
+                    sw.Write(s_generatedCodeAttribute);
                     sw.WriteLine(']');
                 }
 
@@ -2678,7 +2680,7 @@ public sealed partial class PInvokeGenerator : IDisposable
 
         if (emitGeneratedCodeAttribute && !isTestOutput && !onlySupportedOSPlatform && _config.GeneratedCodeAttributeMode == GeneratedCodeAttributeMode.Type)
         {
-            outputBuilder.WriteCustomAttribute(GeneratedCodeAttribute);
+            outputBuilder.WriteCustomAttribute(s_generatedCodeAttribute);
         }
 
         if (TryGetRemappedValue(namedDecl, _config._withAttributes, _config._withoutAttributes, out var attributes, matchStar: true))

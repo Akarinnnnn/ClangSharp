@@ -320,6 +320,11 @@ public sealed partial class PInvokeGenerator
 
                 if ((semanticParentCursor is null) || IsExcluded(semanticParentCursor) || IsAlwaysIncluded(semanticParentCursor))
                 {
+                    if (IsAnonymousEnum(name))
+                    {
+                        return false;
+                    }
+
                     if (_config.LogExclusions)
                     {
                         AddDiagnostic(DiagnosticLevel.Info, $"Excluded {kind} '{qualifiedName}' as it was not in the include list");
@@ -644,6 +649,36 @@ public sealed partial class PInvokeGenerator
         return exprType.SizeOf < subExprType.SizeOf;
     }
 
+    private static bool IsBinaryOpsIntegralSignMixed(BinaryOperator binaryOperator)
+    {
+        var lhs = binaryOperator.LHS.IgnoreImplicitAsWritten;
+        var rhs = binaryOperator.RHS.IgnoreImplicitAsWritten;
+
+        var lCanonicalType = lhs.Type.CanonicalType;
+        var rCanonicalType = rhs.Type.CanonicalType;
+
+        return lCanonicalType.IsIntegralOrEnumerationType && rCanonicalType.IsIntegralOrEnumerationType
+            && (IsCXUnsignedIntegralType(lCanonicalType) != IsCXUnsignedIntegralType(rCanonicalType));
+    }
+
+    private static bool IsNullOperand(Expr expr)
+    {
+        if (expr is not CastExpr cast)
+        {
+            return expr.Type.IsNullPtrType;
+        }
+
+        if (cast.CastKind is CX_CK_NullToPointer)
+        {
+            return true;
+        }
+
+        var writtenExpr = cast.SubExprAsWritten.IgnoreParens;
+        var writtenExprType = writtenExpr.Type;
+
+        return writtenExprType.IsNullPtrType || (writtenExpr is IntegerLiteral intLiteral && intLiteral.Value == 0);
+    }
+
     private bool IsBaseExcluded(CXXRecordDecl cxxRecordDecl, CXXRecordDecl baseCxxRecordDecl, CXXBaseSpecifier cxxBaseSpecifier, out string baseFieldName)
     {
         baseFieldName = GetAnonymousName(cxxBaseSpecifier, "Base");
@@ -724,27 +759,10 @@ public sealed partial class PInvokeGenerator
     private bool IsPrevContextDecl<T>([MaybeNullWhen(false)] out T cursor, out object? userData, bool includeLast = false)
         where T : Decl
     {
-        var previousContext = _context.Last;
-        Debug.Assert(previousContext != null);
-
-        if (!includeLast)
+        if (TryMatchPrevDeclContext<T, object>(out var ctx, includeLast))
         {
-            previousContext = previousContext.Previous;
-            Debug.Assert(previousContext != null);
-        }
-
-        while (previousContext.Value.Cursor is not Decl)
-        {
-            previousContext = previousContext.Previous;
-            Debug.Assert(previousContext != null);
-        }
-
-        var value = previousContext.Value;
-
-        if (value.Cursor is T t)
-        {
-            cursor = t;
-            userData = value.UserData;
+            cursor = ctx.Cursor;
+            userData = ctx.UserData;
             return true;
         }
         else
@@ -755,25 +773,43 @@ public sealed partial class PInvokeGenerator
         }
     }
 
+    /// <devdoc>
+    /// <summary>
+    /// Attempt to match previous contexts for a suitable mutable <see cref="Context{,}"/> wrapper.
+    /// </summary>
+    /// <typeparam name="TDecl"></typeparam>
+    /// <typeparam name="TUserData"></typeparam>
+    /// <param name="ctx">Available if returned <see langword="true"/></param>
+    /// <param name="includeLast"></param>
+    /// <returns>Returns <see langword="true"/> when successfully created a wrapper, otherwise <paramref name="ctx"/> contains invalid value.</returns>
+    /// </devdoc>
+    private bool TryMatchPrevDeclContext<TDecl, TUserData>([MaybeNullWhen(false)] out Context<TDecl, TUserData> ctx, bool includeLast = false)
+        where TDecl : Decl where TUserData : notnull
+    {
+        return TryMatchPrevMutableContext(out ctx, previousContext => {
+            if (!includeLast)
+            {
+                previousContext = previousContext.Previous!;
+                Debug.Assert(previousContext != null);
+            }
+
+            while (previousContext.Value.Cursor is not Decl)
+            {
+                previousContext = previousContext.Previous!;
+                Debug.Assert(previousContext != null);
+            }
+
+            return previousContext;
+        });
+    }
+
     private bool IsPrevContextStmt<T>([MaybeNullWhen(false)] out T cursor, out object? userData, bool preserveParen = false, bool preserveImplicitCast = false)
         where T : Stmt
     {
-        var previousContext = _context.Last;
-        Debug.Assert(previousContext != null);
-
-        do
+        if (TryMatchPrevStmtContext<T, object>(out var matchedCtx, preserveParen, preserveImplicitCast))
         {
-            previousContext = previousContext.Previous;
-            Debug.Assert(previousContext is not null);
-        }
-        while ((!preserveParen && (previousContext.Value.Cursor is ParenExpr)) || (!preserveImplicitCast && (previousContext.Value.Cursor is ImplicitCastExpr)));
-
-        var value = previousContext.Value;
-
-        if (value.Cursor is T t)
-        {
-            cursor = t;
-            userData = value.UserData;
+            cursor = matchedCtx.Cursor;
+            userData = matchedCtx.UserData;
             return true;
         }
         else
@@ -782,6 +818,56 @@ public sealed partial class PInvokeGenerator
             userData = null;
             return false;
         }
+    }
+
+    /// <devdoc>
+    /// <summary>
+    /// Attempt to match previous contexts for a suitable mutable <see cref="Context{TStmt, TUserData}"/> wrapper.
+    /// </summary>
+    /// <typeparam name="TStmt"></typeparam>
+    /// <typeparam name="TUserData"></typeparam>
+    /// <param name="ctx">Available if returned <see langword="true"/></param>
+    /// <param name="preserveParen"></param>
+    /// <param name="preserveImplicitCast"></param>
+    /// <returns>Returns <see langword="true"/> when successfully created a wrapper, otherwise <paramref name="ctx"/> contains invalid value.</returns>
+    /// </devdoc>
+    private bool TryMatchPrevStmtContext<TStmt, TUserData>([MaybeNullWhen(false)] out Context<TStmt, TUserData> ctx, bool preserveParen = false, bool preserveImplicitCast = false)
+        where TStmt : Stmt where TUserData : notnull
+    {
+        return TryMatchPrevMutableContext(out ctx, previousContext => {
+            Debug.Assert(previousContext != null);
+
+            do
+            {
+                previousContext = previousContext.Previous!;
+                Debug.Assert(previousContext is not null);
+            }
+            while ((!preserveParen && (previousContext.ValueRef.Cursor is ParenExpr))
+                || (!preserveImplicitCast && (previousContext.ValueRef.Cursor is ImplicitCastExpr)));
+
+            return previousContext;
+        });
+    }
+
+    /// <devdoc>
+    /// <summary>
+    /// Attempt to match previous contexts for suitable mutable <see cref="Context{,}"/> wrapper.
+    /// </summary>
+    /// <typeparam name="TCursor">Desired cursor type</typeparam>
+    /// <typeparam name="TUserData">Desired user data type</typeparam>
+    /// <param name="ctx">Available if returned <see langword="true"/></param>
+    /// <param name="selectContext">Pass <see langword="null"/> to match only the last context.</param>
+    /// <returns>Returns <see langword="true"/> when successfully created a wrapper, otherwise <paramref name="ctx"/> contains invalid value.</returns>
+    /// </devdoc>
+    private bool TryMatchPrevMutableContext<TCursor, TUserData>(
+        [MaybeNullWhen(false)] out Context<TCursor, TUserData> ctx,
+        Func<LinkedListNode<(Cursor Cursor, object? UserData)>, LinkedListNode<(Cursor Cursor, object? UserData)>>? selectContext = null)
+        where TCursor : Cursor where TUserData : notnull
+    {
+        var lastCtxNode = _context.Last;
+        Debug.Assert(lastCtxNode is not null);
+
+        return Context<TCursor, TUserData>.TryLoadFrom(lastCtxNode, out ctx, selectContext);
     }
 
     private bool IsReadonly(CXXMethodDecl? cxxMethodDecl)
@@ -1756,5 +1842,15 @@ public sealed partial class PInvokeGenerator
                 return false;
             }
         }
+    }
+
+    private static bool IsCXUnsignedIntegralType(Type type)
+    {
+        return type.Kind switch {
+            CXType_Char_U or CXType_UChar or CXType_UShort or CXType_UInt or CXType_ULong or CXType_ULongLong => true,
+            CXType_Char_S or CXType_SChar or CXType_Short or CXType_Int or CXType_Long or CXType_LongLong => false,
+            CXType_Enum => IsCXUnsignedIntegralType(((EnumType)type).Decl.IntegerType),
+            _ => throw new ArgumentException($"type passed ({type}) is not integral or enum.", nameof(type)),
+        };
     }
 }

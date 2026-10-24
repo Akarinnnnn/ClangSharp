@@ -64,6 +64,12 @@ public sealed partial class PInvokeGenerator : IDisposable
     private readonly HashSet<string> _visitedFiles;
     private readonly HashSet<string> _bodyEmittedFunctionMangledNames;
     private readonly List<Diagnostic> _diagnostics;
+
+    /// <devdoc>
+    /// <remarks>
+    /// should be operated through <see cref="ContextScope"/> and <see cref="TryMatchPrevMutableContext"/>
+    /// </remarks>
+    /// </devdoc>
     private readonly LinkedList<(Cursor Cursor, object? UserData)> _context;
     private readonly Dictionary<string, Guid> _uuidsToGenerate;
     private readonly Dictionary<string, string> _uuidNameOverrides;
@@ -2597,9 +2603,14 @@ public sealed partial class PInvokeGenerator : IDisposable
         return IsUnsigned(sourceTypeName) && !IsUnsigned(targetTypeName);
     }
 
+    /// <devdoc>
+    /// <remarks>
+    /// Pushes <see cref="_context"/> for <paramref name="cursor"/>
+    /// </remarks>
+    /// </devdoc>
     private void Visit(Cursor cursor)
     {
-        var currentContext = _context.AddLast((cursor, null));
+        using ContextScope ctxScope = new(cursor, null, this);
         var currentStmtUsers = _stmtOutputBuilder is not null ? (int?)_stmtOutputBuilderUsers : null;
 
         if (cursor is Attr attr)
@@ -2632,11 +2643,14 @@ public sealed partial class PInvokeGenerator : IDisposable
             AddDiagnostic(DiagnosticLevel.Error, $"Unsupported cursor: '{cursor.CursorKindSpelling}'. Generated bindings may be incomplete.", cursor);
         }
 
-        Debug.Assert(currentStmtUsers == (_stmtOutputBuilder is not null ? (int?)_stmtOutputBuilderUsers : null));
-        Debug.Assert(_context.Last == currentContext);
-        _context.RemoveLast();
+        Debug.Assert(currentStmtUsers == (_stmtOutputBuilder is not null ? _stmtOutputBuilderUsers : null));
     }
 
+    /// <devdoc>
+    /// <remarks>
+    /// Pushes <see cref="_context"/> for each <paramref name="cursors"/>
+    /// </remarks>
+    /// </devdoc>
     private void Visit(IEnumerable<Cursor> cursors)
     {
         foreach (var cursor in cursors)
@@ -2645,6 +2659,11 @@ public sealed partial class PInvokeGenerator : IDisposable
         }
     }
 
+    /// <devdoc>
+    /// <remarks>
+    /// Pushes <see cref="_context"/> for each cursor
+    /// </remarks>
+    /// </devdoc>
     private void Visit(IEnumerable<Cursor> cursors, IEnumerable<Cursor> excludedCursors) => Visit(cursors.Except(excludedCursors));
 
     private static IEnumerable<Attr> GetAttributesFor(NamedDecl namedDecl)

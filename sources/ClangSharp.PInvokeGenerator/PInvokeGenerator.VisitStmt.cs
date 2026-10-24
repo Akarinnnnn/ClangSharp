@@ -1587,24 +1587,21 @@ public partial class PInvokeGenerator
                     subExpr = null;
                 }
             }
-            else if (IsPrevContextStmt<CaseStmt>(out _, out _))
+            else if (TryMatchPrevStmtContext<CaseStmt, object>(out var ctx))
             {
-                var previousContext = _context.Last;
-                Debug.Assert(previousContext is not null);
-
-                previousContext = previousContext.Previous;
+                if (ctx.TryMatchPreviousContexts<SwitchStmt, object>(out var switchCtx, previousContext => {
+                    previousContext = previousContext.Previous!;
                 Debug.Assert(previousContext is not null);
 
                 do
                 {
-                    previousContext = previousContext.Previous;
+                        previousContext = previousContext.Previous!;
                     Debug.Assert(previousContext is not null);
                 }
                 while (previousContext.Value.Cursor is ParenExpr or ImplicitCastExpr or CaseStmt or CompoundStmt);
 
-                var value = previousContext.Value;
-
-                if ((value.Cursor is SwitchStmt switchStmt) && IsType<EnumType>(switchStmt.Cond.IgnoreImplicit))
+                    return previousContext;
+                }) && IsType<EnumType>(switchCtx.Cursor.Cond.IgnoreImplicit))
                 {
                     Visit(subExpr);
                     subExpr = null;

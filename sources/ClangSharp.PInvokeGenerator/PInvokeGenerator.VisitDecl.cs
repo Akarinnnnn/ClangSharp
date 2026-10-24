@@ -19,6 +19,7 @@ using static ClangSharp.Interop.CXBinaryOperatorKind;
 using static ClangSharp.Interop.CXUnaryOperatorKind;
 using static ClangSharp.Interop.CXEvalResultKind;
 using static ClangSharp.Interop.CXTypeKind;
+using static ClangSharp.Interop.CXUnaryOperatorKind;
 
 namespace ClangSharp;
 
@@ -900,7 +901,7 @@ public partial class PInvokeGenerator
 
                 if (body is CompoundStmt compoundStmt)
                 {
-                    var currentContext = _context.AddLast((compoundStmt, null));
+                    using ContextScope ctxScope = new(compoundStmt, null, this);
 
                     _outputBuilder.BeginConstructorInitializers();
 
@@ -916,8 +917,6 @@ public partial class PInvokeGenerator
 
                     _outputBuilder.EndConstructorInitializers();
 
-                    Debug.Assert(_context.Last == currentContext);
-                    _context.RemoveLast();
                 }
                 else
                 {
@@ -985,9 +984,10 @@ public partial class PInvokeGenerator
 
                 var memberRefTypeName = GetRemappedTypeName(memberRef, context: null, memberRef.Type, out var memberRefNativeTypeName);
 
-                _ = _context.AddLast((cxxConstructorDecl, skipInitializer));
+                {
+                    using ContextScope ctxScope = new(cxxConstructorDecl, skipInitializer, this);
                 UncheckStmt(memberRefTypeName, memberInit);
-                _context.RemoveLast();
+                }
 
                 if (!skipInitializer)
                 {

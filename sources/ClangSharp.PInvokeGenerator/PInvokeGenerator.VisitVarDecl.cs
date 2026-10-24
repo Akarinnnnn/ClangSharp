@@ -284,9 +284,9 @@ public partial class PInvokeGenerator
 
             _outputBuilder.BeginValue(in desc);
 
-            var currentContext = _context.Last;
-            Debug.Assert(currentContext is not null);
-            currentContext.Value = (currentContext.Value.Cursor, desc);
+            var assertIsADecl = TryMatchPrevDeclContext<Decl, ValueDesc>(out var declCtx);
+            Debug.Assert(assertIsADecl);
+            declCtx.UserData = desc;
 
             if (varDecl.HasInit)
             {

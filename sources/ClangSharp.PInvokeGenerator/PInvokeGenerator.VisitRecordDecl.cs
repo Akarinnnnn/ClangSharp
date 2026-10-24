@@ -796,7 +796,7 @@ public partial class PInvokeGenerator
                 return;
             }
 
-            var currentContext = _context.AddLast((cxxMethodDecl, null));
+            using ContextScope ctxScope = new(cxxMethodDecl, null, this);
 
             var returnType = cxxMethodDecl.ReturnType;
             var returnTypeName = GetRemappedTypeName(cxxMethodDecl, cxxRecordDecl, returnType, out var nativeTypeName);
@@ -843,9 +843,6 @@ public partial class PInvokeGenerator
 
             _outputBuilder.EndFunctionInnerPrototype(in desc);
             _outputBuilder.EndFunctionOrDelegate(in desc);
-
-            Debug.Assert(_context.Last == currentContext);
-            _context.RemoveLast();
         }
 
         void OutputMarkerInterfaces(CXXRecordDecl rootCxxRecordDecl, CXXRecordDecl cxxRecordDecl)
@@ -948,7 +945,7 @@ public partial class PInvokeGenerator
                 return;
             }
 
-            var currentContext = _context.AddLast((cxxMethodDecl, null));
+            using ContextScope ctxScope = new(cxxMethodDecl, emittedMemberNames, this);
 
             var returnType = cxxMethodDecl.ReturnType;
             var returnTypeName = GetRemappedTypeName(cxxMethodDecl, cxxRecordDecl, returnType, out var nativeTypeName);
@@ -1206,9 +1203,6 @@ public partial class PInvokeGenerator
             _outputBuilder.EndInnerFunctionBody();
             _outputBuilder.EndBody();
             _outputBuilder.EndFunctionOrDelegate(in desc);
-
-            Debug.Assert(_context.Last == currentContext);
-            _context.RemoveLast();
         }
 
         void OutputVtblHelperMethods(CXXRecordDecl rootCxxRecordDecl, CXXRecordDecl cxxRecordDecl, HashSet<string> emittedMemberNames)

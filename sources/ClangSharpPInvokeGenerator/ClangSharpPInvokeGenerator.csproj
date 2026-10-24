@@ -5,7 +5,8 @@
     <OutputType>Exe</OutputType>
     <PackAsTool>true</PackAsTool>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PublishAot>true</PublishAot>
+    <!-- Enable Edit and Contniue(ENC/HotReload) on Debug builds -->
+    <PublishAot Condition="'$(Configuration)' != 'Debug'">true</PublishAot>
     <RuntimeIdentifiers>linux-arm64;linux-x64;osx-arm64;win-arm64;win-x64</RuntimeIdentifiers>
     <TargetFramework>net10.0</TargetFramework>
     <!-- This tool is not localized; CA1303 (pass literal strings via a resource table) is noise here. -->

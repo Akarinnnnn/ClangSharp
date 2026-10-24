@@ -1590,9 +1590,6 @@ public partial class PInvokeGenerator
             else if (TryMatchPrevStmtContext<CaseStmt, object>(out var ctx))
             {
                 if (ctx.TryMatchPreviousContexts<SwitchStmt, object>(out var switchCtx, previousContext => {
-                    previousContext = previousContext.Previous!;
-                Debug.Assert(previousContext is not null);
-
                 do
                 {
                         previousContext = previousContext.Previous!;

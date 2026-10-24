@@ -61,10 +61,10 @@ public partial class PInvokeGenerator
         {
             _user = ref user;
             Cursor = c;
-            TargetNode = selectedNode;
+            TargetContextNode = selectedNode;
         }
 
-        public readonly LinkedListNode<(Cursor Cursor, object? UserData)> TargetNode { get; }
+        public readonly LinkedListNode<(Cursor Cursor, object? UserData)> TargetContextNode { get; }
 
         public readonly TCursor Cursor { get; }
 
@@ -82,15 +82,30 @@ public partial class PInvokeGenerator
             }
         }
 
+        /// <devdoc>
+        /// <summary>
+        /// Attempt to match a wrapper <see cref="Context{, }"/> starting from the previous context of <see cref="TargetContextNode"/>
+        /// </summary>
+        /// <typeparam name="TNewCursor"></typeparam>
+        /// <typeparam name="TNewUserData"></typeparam>
+        /// <param name="ctx">Valid if returned <see langword="true"/>.</param>
+        /// <param name="selectContext">Pass <see langword="null"/> to match the previous of <see cref="TargetContextNode"/> only.</param>
+        /// <returns>The <paramref name="ctx"> is valid when return <see langword="true"/>.</returns>
+        /// </devdoc>
         internal readonly bool TryMatchPreviousContexts<TNewCursor, TNewUserData>(
             [MaybeNullWhen(false)] out Context<TNewCursor, TNewUserData> ctx,
             Func<LinkedListNode<(Cursor Cursor, object? UserData)>, LinkedListNode<(Cursor Cursor, object? UserData)>>? selectContext = null)
             where TNewCursor : Cursor where TNewUserData : notnull
-            => Context<TNewCursor, TNewUserData>.TryLoadFrom(TargetNode, out ctx, selectContext);
+        {
+            var previousContext = TargetContextNode.Previous;
+            Debug.Assert(previousContext is not null);
+
+            return Context<TNewCursor, TNewUserData>.TryLoadFrom(previousContext, out ctx, selectContext);
+        }
 
         internal readonly Context<TNewCursor, TUserData> CastCursor<TNewCursor>()
             where TNewCursor : TCursor
-            => new((TNewCursor)Cursor, ref _user, TargetNode);
+            => new((TNewCursor)Cursor, ref _user, TargetContextNode);
 
         internal static bool IsContextTypeMatch(Cursor c, object? user, [NotNullWhen(true)] out TCursor? goodCursor)
         {

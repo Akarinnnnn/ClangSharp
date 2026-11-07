@@ -69,7 +69,7 @@ public sealed partial class PInvokeGenerator
         return nameString;
     }
 
-    private static string GetCursorMangledName(Decl decl) => decl.Handle.Mangling.CString;
+    internal static string GetCursorMangledName(Cursor cursor) => cursor.Handle.Mangling.CString;
 
     private static ReadOnlySpan<char> StripCursorNameTagPrefix(ReadOnlySpan<char> name, scoped ref string? nameString)
     {
@@ -94,9 +94,9 @@ public sealed partial class PInvokeGenerator
 
     private static ReadOnlySpan<char> StripCursorNameAnonymousQualifier(ReadOnlySpan<char> name, scoped ref string? nameString)
     {
-        // A nested anonymous decl is spelled as a qualifier chain such as
+        // A nested anonymous cursor is spelled as a qualifier chain such as
         // `Outer::(anonymous struct)::(anonymous struct at file:line:col)`, where clang 22 renders
-        // the intermediate scopes without a location. Reduce it to the innermost segment (the decl's
+        // the intermediate scopes without a location. Reduce it to the innermost segment (the cursor's
         // own `(anonymous ... at ...)`) by stripping through the last qualifier rather than the first.
         var anonymousNameStartIndex = name.LastIndexOf("::(", StringComparison.Ordinal);
 
@@ -193,7 +193,7 @@ public sealed partial class PInvokeGenerator
             _ => null,
         };
 
-        // A synthesized name for an anonymous decl carries no source namespace to restore.
+        // A synthesized name for an anonymous cursor carries no source namespace to restore.
         if (decl is null || decl.Handle.IsAnonymous)
         {
             return nativeTypeName;
@@ -241,7 +241,7 @@ public sealed partial class PInvokeGenerator
     {
         // clang 22's type printer omits the enclosing C++ namespace from a reference when a
         // matching `using namespace` is in scope, where-as older releases always spelled it.
-        // Rebuild the dropped `Namespace::` prefix from the decl so the NativeTypeName keeps the
+        // Rebuild the dropped `Namespace::` prefix from the cursor so the NativeTypeName keeps the
         // fully qualified source spelling (e.g. `Gdiplus::Status`) and stays stable across versions.
 
         var namespaceNames = new List<string>();
@@ -569,7 +569,7 @@ public sealed partial class PInvokeGenerator
         {
             var recordDecl = (CXXRecordDecl)recordType.Decl;
 
-            // The referenced decl can be a redeclaration (e.g. a MIDL forward `typedef interface`)
+            // The referenced cursor can be a redeclaration (e.g. a MIDL forward `typedef interface`)
             // rather than the definition. A non-definition carries the base list but no members, so
             // resolving to the definition is required to flatten every inherited method into the
             // derived vtable.
@@ -600,7 +600,7 @@ public sealed partial class PInvokeGenerator
 
         // A `--remap-type` / `--remap-field` entry takes precedence over the general `--remap` so a
         // type and a field that share a name (legal in C, but not C#) can be disambiguated. These
-        // are only consulted here, on the decl's own name, so that resolving the *type* referenced
+        // are only consulted here, on the cursor's own name, so that resolving the *type* referenced
         // by a field (which reuses the field cursor) doesn't pick up a `--remap-field` entry.
         var kindSpecificRemappedNames = namedDecl switch {
             FieldDecl => _config._remappedFieldNames,

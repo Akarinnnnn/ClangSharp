@@ -34,6 +34,8 @@
 
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
     <CheckForOverflowUnderflow>false</CheckForOverflowUnderflow>
+    <PublishTrimmed>false</PublishTrimmed>
+    <PublishAot>false</PublishAot>
   </PropertyGroup>
 
   <!-- Default settings that explicitly differ from the Sdk.targets defaults-->

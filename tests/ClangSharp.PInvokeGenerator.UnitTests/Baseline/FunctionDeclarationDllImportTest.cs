@@ -94,8 +94,7 @@ struct MyStruct
     {
         var inputContents = @"extern ""C"" void MyFunction();";
 
-        var withLibraryPaths = new Dictionary<string, string>
-        {
+        var withLibraryPaths = new Dictionary<string, string> {
             ["MyFunction"] = "ClangSharpPInvokeGenerator"
         };
         return ValidateAsync(nameof(WithLibraryPathTest), inputContents, libraryPath: string.Empty, withLibraryPaths: withLibraryPaths);
@@ -106,8 +105,7 @@ struct MyStruct
     {
         var inputContents = @"extern ""C"" void MyFunction();";
 
-        var withLibraryPaths = new Dictionary<string, string>
-        {
+        var withLibraryPaths = new Dictionary<string, string> {
             ["*"] = "ClangSharpPInvokeGenerator"
         };
         return ValidateAsync(nameof(WithLibraryPathStarTest), inputContents, libraryPath: string.Empty, withLibraryPaths: withLibraryPaths);
@@ -160,8 +158,7 @@ struct MyStruct
 
 extern ""C"" void MyFunction(HRESULT value = S_OK);";
 
-        var withTransparentStructs = new Dictionary<string, (string, PInvokeGeneratorTransparentStructKind)>
-        {
+        var withTransparentStructs = new Dictionary<string, (string, PInvokeGeneratorTransparentStructKind)> {
             ["HRESULT"] = ("int", PInvokeGeneratorTransparentStructKind.Unknown)
         };
         var remappedNames = new Dictionary<string, string> { ["HRESULT"] = "HRESULT" };
@@ -184,8 +181,7 @@ extern ""C"" void MyFunction(HRESULT value = S_OK);";
     {
         var inputContents = @"extern ""C"" void MyFunction1(int value); extern ""C"" void MyFunction2(int value);";
 
-        var withCallConvs = new Dictionary<string, string>
-        {
+        var withCallConvs = new Dictionary<string, string> {
             ["*"] = "Winapi"
         };
         return ValidateAsync(nameof(WithCallConvStarTest), inputContents, withCallConvs: withCallConvs);
@@ -196,8 +192,7 @@ extern ""C"" void MyFunction(HRESULT value = S_OK);";
     {
         var inputContents = @"extern ""C"" void MyFunction1(int value); extern ""C"" void MyFunction2(int value);";
 
-        var withCallConvs = new Dictionary<string, string>
-        {
+        var withCallConvs = new Dictionary<string, string> {
             ["*"] = "Winapi",
             ["MyFunction2"] = "StdCall"
         };
@@ -211,8 +206,7 @@ extern ""C"" void MyFunction(HRESULT value = S_OK);";
 
         // 'MyFunction?' matches a single trailing character, so it applies to MyFunction1 and
         // MyFunction2 but not MyFunctionExtra.
-        var withCallConvs = new Dictionary<string, string>
-        {
+        var withCallConvs = new Dictionary<string, string> {
             ["MyFunction?"] = "Winapi"
         };
         return ValidateAsync(nameof(WithCallConvWildcardTest), inputContents, withCallConvs: withCallConvs);
@@ -226,8 +220,7 @@ extern ""C"" void MyFunction(HRESULT value = S_OK);";
         // Exercises the full precedence chain: the bare '*' catch-all makes everything Winapi, the
         // 'MyFunction*' glob narrows those to StdCall, and the exact 'MyFunction2' key wins over the
         // glob with Cdecl.
-        var withCallConvs = new Dictionary<string, string>
-        {
+        var withCallConvs = new Dictionary<string, string> {
             ["*"] = "Winapi",
             ["MyFunction*"] = "StdCall",
             ["MyFunction2"] = "Cdecl"
@@ -241,8 +234,7 @@ extern ""C"" void MyFunction(HRESULT value = S_OK);";
         var inputContents = @"extern ""C"" void MyFunction1(int value); extern ""C"" void MyFunction2(int value);";
 
         // '*' applies Winapi to every function; the '*2' glob opt-out opts MyFunction2 back out so it keeps the default.
-        var withCallConvs = new Dictionary<string, string>
-        {
+        var withCallConvs = new Dictionary<string, string> {
             ["*"] = "Winapi"
         };
         string[] withoutCallConvs = ["*2"];
@@ -284,8 +276,7 @@ extern ""C"" void MyFunction(HRESULT value = S_OK);";
         var inputContents = @"extern ""C"" void MyFunction1(int value); extern ""C"" void MyFunction2(int value);";
 
         // '*' applies Winapi to every function; '--without-callconv MyFunction2' opts that one back out so it keeps the default.
-        var withCallConvs = new Dictionary<string, string>
-        {
+        var withCallConvs = new Dictionary<string, string> {
             ["*"] = "Winapi"
         };
         string[] withoutCallConvs = ["MyFunction2"];

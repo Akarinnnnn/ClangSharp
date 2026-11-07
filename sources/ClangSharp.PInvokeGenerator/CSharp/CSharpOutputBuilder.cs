@@ -4,7 +4,9 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Text;
+using ClangSharp.Abstractions;
 
 namespace ClangSharp.CSharp;
 
@@ -80,6 +82,7 @@ internal sealed partial class CSharpOutputBuilder(string name, PInvokeGenerator 
 
     public void Write<T>(T value) => _ = _currentLine.Append(value);
 
+    public void WriteCSharpBooleanLiteral(bool value) => _currentLine.Append(value ? "true" : "false");
     public void Write(ReadOnlySpan<char> value) => _ = _currentLine.Append(value);
 
     public void WriteIndentation()
@@ -337,6 +340,70 @@ internal sealed partial class CSharpOutputBuilder(string name, PInvokeGenerator 
         else
         {
             Write(postfix);
+        }
+    }
+
+    internal void AddNativeRecordLayoutDescAttribute(StructDesc.LayoutDesc layoutDesc, string? prefix = null, string? postfix = null, string? attributePrefix = null)
+    {
+        AddUsingDirective("System.Runtime.InteropServices");
+
+        if (prefix is null)
+        {
+            WriteIndentation();
+        }
+        else
+        {
+            WriteNewlineIfNeeded();
+            Write(prefix);
+        }
+
+        Write('[');
+
+        if (attributePrefix != null)
+        {
+            Write(attributePrefix);
+        }
+
+        Write("NativeRecordLayoutDescAttribute");
+        Write('(');
+        // current platform defaults(windows/unix)
+        Write(_generator.Config.GenerateUnixTypes ? "\"unix\", " : "\"windows\", ");
+        Write(FormatInt64AttributeValue(layoutDesc.Alignment32));
+        Write(", ");
+        Write(FormatInt64AttributeValue(layoutDesc.Alignment64));
+        Write(", ");
+        Write(FormatInt64AttributeValue(layoutDesc.Size32));
+        Write(", ");
+        Write(FormatInt64AttributeValue(layoutDesc.Size64));
+        Write(", ");
+        Write(FormatInt64AttributeValue(layoutDesc.MaxFieldAlignment));
+        Write(", ");
+
+        Write($"LayoutKind.{layoutDesc.Kind}, ");
+
+        var hasPack = !string.IsNullOrWhiteSpace(layoutDesc.Pack);
+        WriteCSharpBooleanLiteral(hasPack);
+        if (hasPack)
+        {
+            Write(", " + layoutDesc.Pack);
+        }
+
+        Write(')');
+        Write(']');
+
+        if (postfix is null)
+        {
+            NeedsNewline = true;
+        }
+        else
+        {
+            Write(postfix);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        static string FormatInt64AttributeValue(long value)
+        {
+            return value.ToString(CultureInfo.InvariantCulture);
         }
     }
 

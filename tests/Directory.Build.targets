@@ -10,6 +10,13 @@
     MSBuildAllProjects, as that is done by the file that imports us.
   -->
 
+  <ItemGroup Condition="'$(EnableRoslynBasedUtilities)' != ''">
+    <Compile Include="$(MSBuildThisFileDirectory)sharedSources\RoslynBased\**\*.cs"
+             AutoGen="true"
+             LinkBase="RoslynBasedTestingUtilities" />
+    <PackageReference Include="DiffPlex" />
+  </ItemGroup>
+  
   <Import Project="$(MSBuildThisFileDirectory)..\Directory.Build.targets" />
 
 </Project>

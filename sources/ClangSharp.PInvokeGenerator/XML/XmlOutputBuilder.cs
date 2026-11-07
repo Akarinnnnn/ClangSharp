@@ -20,8 +20,7 @@ internal partial class XmlOutputBuilder(string name, PInvokeGenerator generator)
 
     public bool IsTestOutput { get; }
 
-    private static readonly XmlWriterSettings s_writerSettings = new()
-    {
+    private static readonly XmlWriterSettings s_writerSettings = new() {
         Indent = true,
         IndentChars = "  ",
         ConformanceLevel = ConformanceLevel.Fragment,

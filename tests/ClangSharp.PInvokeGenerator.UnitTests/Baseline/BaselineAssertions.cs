@@ -3,6 +3,7 @@
 using System.IO;
 using System.Threading.Tasks;
 using NUnit.Framework;
+using Roslyn.Test.Utilities;
 
 namespace ClangSharp.UnitTests.Baseline;
 
@@ -19,6 +20,7 @@ internal static class BaselineAssertions
             var path = BaselineHarness.MostSpecificPath(area, caseName, variant);
             _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             await File.WriteAllTextAsync(path, actual).ConfigureAwait(false);
+            Assert.Inconclusive($"Updated baseline: {area}/{caseName}({variant})");
             return;
         }
 
@@ -26,6 +28,6 @@ internal static class BaselineAssertions
         Assert.That(resolved, Is.Not.Null, $"No baseline found for case '{caseName}' variant '{variant}'. Run with UPDATE_BASELINES=1 (Windows variants) or seed from the legacy tests (Unix variants).");
 
         var expected = await File.ReadAllTextAsync(resolved!).ConfigureAwait(false);
-        Assert.That(actual, Is.EqualTo(expected));
+        Assert.That(actual, IsText.EqualToOrDiff(expected));
     }
 }

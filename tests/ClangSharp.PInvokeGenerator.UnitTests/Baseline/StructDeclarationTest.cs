@@ -10,11 +10,11 @@ namespace ClangSharp.UnitTests.Baseline;
 [TestFixtureSource(nameof(Variants))]
 public sealed class StructDeclarationTest : BaselineTest
 {
-    private static readonly string[] ExcludeTestExcludedNames = ["MyStruct"];
-    private static readonly string[] ExcludeWildcardTestExcludedNames = ["Foo*", "*Legacy", "B?r"];
-    private static readonly string[] GuidTestExcludedNames = ["DECLSPEC_UUID"];
-    private static readonly string[] GuidConstTestExcludedNames = ["DECLSPEC_UUID", "GUID"];
-    private static readonly string[] GuidDefineAliasTestExcludedNames = ["DECLSPEC_UUID", "EXTERN_C"];
+    private static readonly string[] s_excludeTestExcludedNames = ["MyStruct"];
+    private static readonly string[] s_excludeWildcardTestExcludedNames = ["Foo*", "*Legacy", "B?r"];
+    private static readonly string[] s_guidTestExcludedNames = ["DECLSPEC_UUID"];
+    private static readonly string[] s_guidConstTestExcludedNames = ["DECLSPEC_UUID", "GUID"];
+    private static readonly string[] s_guidDefineAliasTestExcludedNames = ["DECLSPEC_UUID", "EXTERN_C"];
 
     public StructDeclarationTest(BaselineVariant variant) : base(variant)
     {
@@ -212,7 +212,7 @@ struct Derived : Base<T>
     {
         var inputContents = "typedef struct MyStruct MyStruct;";
 
-        return ValidateAsync(nameof(ExcludeTest), inputContents, excludedNames: ExcludeTestExcludedNames);
+        return ValidateAsync(nameof(ExcludeTest), inputContents, excludedNames: s_excludeTestExcludedNames);
     }
 
     [Test]
@@ -226,7 +226,7 @@ typedef struct Keep Keep;";
 
         // 'Foo*' matches by prefix, '*Legacy' by suffix, and 'B?r' matches a single character, so
         // only 'Keep' survives.
-        return ValidateAsync(nameof(ExcludeWildcardTest), inputContents, excludedNames: ExcludeWildcardTestExcludedNames);
+        return ValidateAsync(nameof(ExcludeWildcardTest), inputContents, excludedNames: s_excludeWildcardTestExcludedNames);
     }
 
     [TestCase("double", "double")]
@@ -416,7 +416,7 @@ struct DECLSPEC_UUID(""00000000-0000-0000-C000-000000000047"") MyStruct2
 }};
 ";
 
-        return ValidateAsync(nameof(GuidTest), inputContents, excludedNames: GuidTestExcludedNames);
+        return ValidateAsync(nameof(GuidTest), inputContents, excludedNames: s_guidTestExcludedNames);
     }
 
     [Test]
@@ -451,7 +451,7 @@ class DECLSPEC_UUID(""dc1c5a9c-e88a-4dde-a5a1-60f82a20aef7"") FileOpenDialog;
 ";
 
         var remappedNames = new Dictionary<string, string> { ["GUID"] = "Guid" };
-        return ValidateAsync(nameof(GuidCoclassForwardDeclConstTest), inputContents, excludedNames: GuidConstTestExcludedNames, remappedNames: remappedNames);
+        return ValidateAsync(nameof(GuidCoclassForwardDeclConstTest), inputContents, excludedNames: s_guidConstTestExcludedNames, remappedNames: remappedNames);
     }
 
     [Test]
@@ -487,7 +487,7 @@ extern ""C"" const CLSID CLSID_FileOpenDialog;
 ";
 
         var remappedNames = new Dictionary<string, string> { ["GUID"] = "Guid" };
-        return ValidateAsync(nameof(GuidCoclassConstTest), inputContents, excludedNames: GuidConstTestExcludedNames, remappedNames: remappedNames);
+        return ValidateAsync(nameof(GuidCoclassConstTest), inputContents, excludedNames: s_guidConstTestExcludedNames, remappedNames: remappedNames);
     }
 
     [Test]
@@ -523,7 +523,7 @@ extern ""C"" const IID IID_IFileDialog;
 ";
 
         var remappedNames = new Dictionary<string, string> { ["GUID"] = "Guid" };
-        return ValidateAsync(nameof(GuidInterfaceConstTest), inputContents, excludedNames: GuidConstTestExcludedNames, remappedNames: remappedNames);
+        return ValidateAsync(nameof(GuidInterfaceConstTest), inputContents, excludedNames: s_guidConstTestExcludedNames, remappedNames: remappedNames);
     }
 
     [Test]
@@ -556,7 +556,7 @@ EXTERN_C const IID IID_ITextHost;
 
         var remappedNames = new Dictionary<string, string> { ["GUID"] = "Guid" };
         var withGuids = new Dictionary<string, Guid> { ["ITextHost"] = new Guid("c5bdd8d0-d26e-11ce-a89e-00aa006cadc5") };
-        return ValidateAsync(nameof(GuidInterfaceWithGuidConstTest), inputContents, excludedNames: GuidConstTestExcludedNames, remappedNames: remappedNames, withGuids: withGuids);
+        return ValidateAsync(nameof(GuidInterfaceWithGuidConstTest), inputContents, excludedNames: s_guidConstTestExcludedNames, remappedNames: remappedNames, withGuids: withGuids);
     }
 
     [Test]
@@ -592,7 +592,7 @@ static const IID& IID_ITransferTarget = __uuidof(ITransferTarget);
 ";
 
         var remappedNames = new Dictionary<string, string> { ["_GUID"] = "Guid", ["GUID"] = "Guid" };
-        return ValidateAsync(nameof(GuidInterfaceDuplicateIidTest), inputContents, additionalConfigOptions: PInvokeGeneratorConfigurationOptions.GenerateUnmanagedConstants, excludedNames: GuidTestExcludedNames, remappedNames: remappedNames);
+        return ValidateAsync(nameof(GuidInterfaceDuplicateIidTest), inputContents, additionalConfigOptions: PInvokeGeneratorConfigurationOptions.GenerateUnmanagedConstants, excludedNames: s_guidTestExcludedNames, remappedNames: remappedNames);
     }
 
     [Test]
@@ -633,7 +633,7 @@ EXTERN_C const IID IID_IInternet;
 ";
 
         var remappedNames = new Dictionary<string, string> { ["_GUID"] = "Guid", ["GUID"] = "Guid" };
-        return ValidateAsync(nameof(GuidDefineAliasRefReadonlyTest), inputContents, additionalConfigOptions: PInvokeGeneratorConfigurationOptions.GenerateUnmanagedConstants | PInvokeGeneratorConfigurationOptions.GenerateMacroBindings, excludedNames: GuidDefineAliasTestExcludedNames, remappedNames: remappedNames);
+        return ValidateAsync(nameof(GuidDefineAliasRefReadonlyTest), inputContents, additionalConfigOptions: PInvokeGeneratorConfigurationOptions.GenerateUnmanagedConstants | PInvokeGeneratorConfigurationOptions.GenerateMacroBindings, excludedNames: s_guidDefineAliasTestExcludedNames, remappedNames: remappedNames);
     }
 
     [Test]

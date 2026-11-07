@@ -62,12 +62,12 @@ public sealed partial class PInvokeGenerator : IDisposable
     private readonly Func<string, Stream> _outputStreamFactory;
     private readonly StringBuilder _fileContentsBuilder;
     private readonly HashSet<string> _visitedFiles;
-    private readonly HashSet<string> _bodyEmittedFunctionMangledNames;
+    private readonly HashSet<string> _globalBodyEmittedFunctionMangledNames;
     private readonly List<Diagnostic> _diagnostics;
 
     /// <devdoc>
     /// <remarks>
-    /// should be operated through <see cref="ContextScope"/> and <see cref="TryMatchPrevMutableContext"/>
+    /// should be operated through <see cref="ContextScope"/> and <see cref="TryMatchMutableContext"/>
     /// </remarks>
     /// </devdoc>
     private readonly LinkedList<(Cursor Cursor, object? UserData)> _context;
@@ -178,7 +178,7 @@ public sealed partial class PInvokeGenerator : IDisposable
             });
             _fileContentsBuilder = new StringBuilder();
             _visitedFiles = new HashSet<string>(StringComparer.Ordinal);
-            _bodyEmittedFunctionMangledNames = new HashSet<string>(StringComparer.Ordinal);
+            _globalBodyEmittedFunctionMangledNames = new HashSet<string>(StringComparer.Ordinal);
             _diagnostics = [];
             _context = new LinkedList<(Cursor, object?)>();
             _uuidsToGenerate = new Dictionary<string, Guid>(StringComparer.Ordinal);

@@ -16,13 +16,21 @@
     },
     "SteamworksPlatform": {
       "commandName": "Project",
-      "commandLineArgs": "\"@D:\\src_open\\Fage.Steamworks.AnyCPU\\obj\\draft-workspace\\platform-methods.rsp\"",
+      "commandLineArgs": "\"@D:\\src_open\\Fage.Steamworks.AnyCPU\\obj\\draft-workspace\\steam-platform-methods.rsp\"",
       "workingDirectory": "D:\\src_open\\Fage.Steamworks.AnyCPU\\obj\\draft-workspace"
     },
     "SteamworksABICommon": {
       "commandName": "Project",
-      "commandLineArgs": "\"@D:\\src_open\\Fage.Steamworks.AnyCPU\\obj\\draft-workspace\\steam-api-common-types.rsp\"",
+      "commandLineArgs": "\"@D:\\src_open\\Fage.Steamworks.AnyCPU\\obj\\draft-workspace\\steam-platform-independent.rsp\"",
       "workingDirectory": "D:\\src_open\\Fage.Steamworks.AnyCPU\\obj\\draft-workspace"
+    },
+    "EncDebugC": {
+      "commandName": "Project",
+      "commandLineArgs": "-x c -std c17 -f \"$(MSBuildProjectDirectory)/../../artifacts/input/test.c\" -m A -n N -o \"$(MSBuildProjectDirectory)/../../artifacts/obj/EncGen/test.c.g.cs\" -lg potential-typedef-remappings exclusions visited-files"
+    },
+    "EncDebugCxx": {
+      "commandName": "Project",
+      "commandLineArgs": "-x c++ -std c++17 -f \"$(MSBuildProjectDirectory)/../../artifacts/input/test.cpp\" -m A -n N -o \"$(MSBuildProjectDirectory)/../../artifacts/obj/EncGen/test.g.cs\" -lg potential-typedef-remappings exclusions visited-files"
     }
   }
 }

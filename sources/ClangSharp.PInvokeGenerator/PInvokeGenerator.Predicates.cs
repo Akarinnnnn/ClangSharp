@@ -16,7 +16,7 @@ using ClangSharp.CSharp;
 using ClangSharp.Interop;
 using ClangSharp.XML;
 using static ClangSharp.Interop.CX_AttrKind;
-using static ClangSharp.Interop.CX_CXXAccessSpecifier;
+using static ClangSharp.Interop.CX_CastKind;
 using static ClangSharp.Interop.CX_StmtClass;
 using static ClangSharp.Interop.CX_UnaryExprOrTypeTrait;
 using static ClangSharp.Interop.CXBinaryOperatorKind;
@@ -610,11 +610,6 @@ public sealed partial class PInvokeGenerator
         }
     }
 
-    private bool IsCurrentFunctionBodyGenerated(FunctionDecl funcDecl)
-    {
-        return _bodyEmittedFunctionMangledNames.Contains(GetCursorMangledName(funcDecl));
-    }
-
     private static bool IsIntegralOperatesEnumStmt(BinaryOperator binOp)
     {
         if (binOp.IsRelationalOp || binOp.IsEqualityOp || binOp.IsBitwiseOp || binOp.IsAssignmentOp)
@@ -656,7 +651,11 @@ public sealed partial class PInvokeGenerator
 
         var lCanonicalType = lhs.Type.CanonicalType;
         var rCanonicalType = rhs.Type.CanonicalType;
+        return AreCanonicalTypeSignsDifferent(lCanonicalType, rCanonicalType);
+    }
 
+    private static bool AreCanonicalTypeSignsDifferent(Type lCanonicalType, Type rCanonicalType)
+    {
         return lCanonicalType.IsIntegralOrEnumerationType && rCanonicalType.IsIntegralOrEnumerationType
             && (IsCXUnsignedIntegralType(lCanonicalType) != IsCXUnsignedIntegralType(rCanonicalType));
     }
@@ -761,6 +760,7 @@ public sealed partial class PInvokeGenerator
     {
         if (TryMatchPrevDeclContext<T, object>(out var ctx, includeLast))
         {
+            Debug.Assert(ctx.IsValid);
             cursor = ctx.Cursor;
             userData = ctx.UserData;
             return true;
@@ -786,17 +786,25 @@ public sealed partial class PInvokeGenerator
     private bool TryMatchPrevDeclContext<TDecl, TUserData>([MaybeNullWhen(false)] out Context<TDecl, TUserData> ctx, bool includeLast = false)
         where TDecl : Decl where TUserData : notnull
     {
-        return TryMatchPrevMutableContext(out ctx, previousContext => {
+        return TryMatchMutableContext(out ctx, previousContext => {
             if (!includeLast)
             {
                 previousContext = previousContext.Previous!;
-                Debug.Assert(previousContext != null);
+                if (previousContext is null)
+                {
+                    return null;
+                }
             }
 
             while (previousContext.Value.Cursor is not Decl)
             {
-                previousContext = previousContext.Previous!;
-                Debug.Assert(previousContext != null);
+                var previous = previousContext.Previous;
+                if (previous is null)
+                {
+                    return null;
+                }
+
+                previousContext = previous;
             }
 
             return previousContext;
@@ -808,6 +816,7 @@ public sealed partial class PInvokeGenerator
     {
         if (TryMatchPrevStmtContext<T, object>(out var matchedCtx, preserveParen, preserveImplicitCast))
         {
+            Debug.Assert(matchedCtx.IsValid);
             cursor = matchedCtx.Cursor;
             userData = matchedCtx.UserData;
             return true;
@@ -834,16 +843,15 @@ public sealed partial class PInvokeGenerator
     private bool TryMatchPrevStmtContext<TStmt, TUserData>([MaybeNullWhen(false)] out Context<TStmt, TUserData> ctx, bool preserveParen = false, bool preserveImplicitCast = false)
         where TStmt : Stmt where TUserData : notnull
     {
-        return TryMatchPrevMutableContext(out ctx, previousContext => {
-            Debug.Assert(previousContext != null);
-
+        return TryMatchMutableContext(out ctx, previousContext => {
             do
             {
                 previousContext = previousContext.Previous!;
-                Debug.Assert(previousContext is not null);
             }
-            while ((!preserveParen && (previousContext.ValueRef.Cursor is ParenExpr))
-                || (!preserveImplicitCast && (previousContext.ValueRef.Cursor is ImplicitCastExpr)));
+            while (previousContext is not null && (
+                    (!preserveParen && (previousContext.ValueRef.Cursor is ParenExpr))
+                    || (!preserveImplicitCast && (previousContext.ValueRef.Cursor is ImplicitCastExpr))
+                ));
 
             return previousContext;
         });
@@ -859,15 +867,15 @@ public sealed partial class PInvokeGenerator
     /// <param name="selectContext">Pass <see langword="null"/> to match only the last context.</param>
     /// <returns>Returns <see langword="true"/> when successfully created a wrapper, otherwise <paramref name="ctx"/> contains invalid value.</returns>
     /// </devdoc>
-    private bool TryMatchPrevMutableContext<TCursor, TUserData>(
+    private bool TryMatchMutableContext<TCursor, TUserData>(
         [MaybeNullWhen(false)] out Context<TCursor, TUserData> ctx,
-        Func<LinkedListNode<(Cursor Cursor, object? UserData)>, LinkedListNode<(Cursor Cursor, object? UserData)>>? selectContext = null)
+        Func<LinkedListNode<(Cursor Cursor, object? UserData)>, LinkedListNode<(Cursor Cursor, object? UserData)>?>? selectContext = null)
         where TCursor : Cursor where TUserData : notnull
     {
         var lastCtxNode = _context.Last;
         Debug.Assert(lastCtxNode is not null);
 
-        return Context<TCursor, TUserData>.TryLoadFrom(lastCtxNode, out ctx, selectContext);
+        return Context<TCursor, TUserData>.MatchOnceFrom(lastCtxNode, out ctx, selectContext);
     }
 
     private bool IsReadonly(CXXMethodDecl? cxxMethodDecl)
@@ -1846,11 +1854,13 @@ public sealed partial class PInvokeGenerator
 
     private static bool IsCXUnsignedIntegralType(Type type)
     {
+        // HACK: use this before libClangSharp expose IsSignedIntegerType(CXType) and IsUnsignedIntegerType(CXType)
         return type.Kind switch {
             CXType_Char_U or CXType_UChar or CXType_UShort or CXType_UInt or CXType_ULong or CXType_ULongLong => true,
             CXType_Char_S or CXType_SChar or CXType_Short or CXType_Int or CXType_Long or CXType_LongLong => false,
             CXType_Enum => IsCXUnsignedIntegralType(((EnumType)type).Decl.IntegerType),
-            _ => throw new ArgumentException($"type passed ({type}) is not integral or enum.", nameof(type)),
+            CXType_Bool => true, // don't seem good
+            _ => throw new ArgumentException($"type passed ({type}) is not integral, bool, or enum.", nameof(type)),
         };
     }
 }

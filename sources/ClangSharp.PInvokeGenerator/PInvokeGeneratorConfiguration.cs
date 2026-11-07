@@ -372,6 +372,8 @@ public sealed class PInvokeGeneratorConfiguration
 
     public bool GenerateNativeAlignmentAttribute => (_options & PInvokeGeneratorConfigurationOptions.GenerateNativeAlignmentAttribute) != 0;
 
+    public bool GenerateNativeRecordLayoutDescAttribute => (_options & PInvokeGeneratorConfigurationOptions.GenerateNativeRecordLayoutDescAttribute) != 0;
+
     public bool GenerateNativeBitfieldAttribute => (_options & PInvokeGeneratorConfigurationOptions.GenerateNativeBitfieldAttribute) != 0;
 
     public bool GenerateNativeInheritanceAttribute => (_options & PInvokeGeneratorConfigurationOptions.GenerateNativeInheritanceAttribute) != 0;

@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project>
-
   <!--
     Directory.Packages.props is automatically picked up and imported by
     Microsoft.Common.targets. This file needs to exist, even if empty so that
@@ -9,14 +8,18 @@
     imported beforehand. We also don't need to add ourselves to
     MSBuildAllProjects, as that is done by the file that imports us.
   -->
-
+  <PropertyGroup>
+    <MTPVersion>18.11.0</MTPVersion>
+  </PropertyGroup>
   <!-- Package versions for package references across all projects -->
   <ItemGroup>
+    <PackageVersion Include="DiffPlex" Version="1.9.0" />
     <PackageVersion Include="libClang" Version="22.1.8" />
     <PackageVersion Include="libClangSharp" Version="22.1.8.2" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
-    <PackageVersion Include="NUnit" Version="4.4.0" />
-    <PackageVersion Include="NUnit3TestAdapter" Version="6.1.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="$(MTPVersion)" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="$(MTPVersion)" />
+    <PackageVersion Include="NUnit" Version="5.0.0" />
+    <PackageVersion Include="NUnit3TestAdapter" Version="6.3.1" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.TrxReport" Version="2.5.2" />
   </ItemGroup>
-
 </Project>

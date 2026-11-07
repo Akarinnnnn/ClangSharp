@@ -15,9 +15,9 @@ using static ClangSharp.Interop.CX_StmtClass;
 using static ClangSharp.Interop.CX_StorageClass;
 using static ClangSharp.Interop.CX_StringKind;
 using static ClangSharp.Interop.CX_UnaryExprOrTypeTrait;
-using static ClangSharp.Interop.CXUnaryOperatorKind;
 using static ClangSharp.Interop.CXEvalResultKind;
 using static ClangSharp.Interop.CXTypeKind;
+using static ClangSharp.Interop.CXUnaryOperatorKind;
 
 namespace ClangSharp;
 
@@ -260,13 +260,10 @@ public partial class PInvokeGenerator
                 Kind = kind,
                 Flags = flags,
                 Location = varDecl.Location,
-                WriteCustomAttrs = static context => {
-                    (var varDecl, var generator) = ((VarDecl, PInvokeGenerator))context;
-
-                    generator.WithAttributes(varDecl);
-                    generator.WithUsings(varDecl);
-                },
-                CustomAttrGeneratorData = (varDecl, this),
+                WriteCustomAttrs = _ => {
+                    WithAttributes(varDecl);
+                    WithUsings(varDecl);
+                }
             };
 
             if (openedOutputBuilder)
@@ -284,7 +281,7 @@ public partial class PInvokeGenerator
 
             _outputBuilder.BeginValue(in desc);
 
-            var assertIsADecl = TryMatchPrevDeclContext<Decl, ValueDesc>(out var declCtx);
+            var assertIsADecl = TryMatchPrevDeclContext<VarDecl, ValueDesc>(out var declCtx, true);
             Debug.Assert(assertIsADecl);
             declCtx.UserData = desc;
 
@@ -360,7 +357,7 @@ public partial class PInvokeGenerator
                 if (IsType<PointerType>(varDecl, type) && varDecl.HasInit)
                 {
                     isPointerInit = true;
-                    outputBuilder.BeginFixedStatment();
+                    outputBuilder.BeginFixedStatement();
                 }
 
                 outputBuilder.Write(typeName);
@@ -394,7 +391,7 @@ public partial class PInvokeGenerator
 
                 if (isPointerInit)
                 {
-                    outputBuilder.EndFixedStatment();
+                    outputBuilder.EndFixedStatement();
                 }
             }
 

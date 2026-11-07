@@ -5,10 +5,16 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
+using SelectorFunc = System.Func<System.Collections.Generic.LinkedListNode<(ClangSharp.Cursor Cursor, object? UserData)>,
+    System.Collections.Generic.LinkedListNode<(ClangSharp.Cursor Cursor, object? UserData)>?>;
+
 namespace ClangSharp;
 
 public partial class PInvokeGenerator
 {
+    /// <summary>
+    /// RAII wrapper for <see cref="_context"/>. Release by <see cref="ContextScope.Dispose"/>
+    /// </summary>
     private ref struct ContextScope
     {
         private LinkedListNode<(Cursor, object?)> _node;
@@ -52,33 +58,40 @@ public partial class PInvokeGenerator
     }
 
     [SuppressMessage("Style", "IDE0250:将结构设置为 “readonly”", Justification = "This struct allows caller to modify context")]
-    private ref struct Context<TCursor, TUserData> where TCursor : Cursor
-        where TUserData : notnull
+    private ref struct Context<TCursor, TUserData> where TCursor : Cursor where TUserData : notnull
     {
-        private readonly ref object? _user;
+        [AllowNull]
+        private readonly ref object? _userRef;
 
         private Context(TCursor c, ref object? user, LinkedListNode<(Cursor, object?)> selectedNode)
         {
-            _user = ref user;
+            _userRef = ref user;
             Cursor = c;
             TargetContextNode = selectedNode;
         }
 
-        public readonly LinkedListNode<(Cursor Cursor, object? UserData)> TargetContextNode { get; }
+        public readonly LinkedListNode<(Cursor Cursor, object? UserData)>? TargetContextNode { get; }
 
-        public readonly TCursor Cursor { get; }
+        public readonly TCursor? Cursor { get; }
 
+        [MemberNotNullWhen(true, nameof(TargetContextNode), nameof(Cursor))]
+        public readonly bool IsValid => TargetContextNode is not null;
+
+        [MemberNotNullWhen(true, nameof(TargetContextNode), nameof(Cursor), nameof(_userRef), nameof(UserData))]
+        public readonly bool HasValue => IsValid && _userRef is not null;
 
         public TUserData? UserData
         {
             readonly get
             {
-                return (TUserData?)_user;
+                Debug.Assert(IsValid);
+                return (TUserData?)_userRef;
             }
             [SuppressMessage("Style", "IDE0251:将成员设为“readonly”", Justification = "Mutates context itself")]
             set
             {
-                _user = value;
+                Debug.Assert(IsValid);
+                _userRef = value;
             }
         }
 
@@ -94,25 +107,36 @@ public partial class PInvokeGenerator
         /// </devdoc>
         internal readonly bool TryMatchPreviousContexts<TNewCursor, TNewUserData>(
             [MaybeNullWhen(false)] out Context<TNewCursor, TNewUserData> ctx,
-            Func<LinkedListNode<(Cursor Cursor, object? UserData)>, LinkedListNode<(Cursor Cursor, object? UserData)>>? selectContext = null)
+            SelectorFunc? selectContext = null)
             where TNewCursor : Cursor where TNewUserData : notnull
         {
+            Debug.Assert(IsValid);
             var previousContext = TargetContextNode.Previous;
             Debug.Assert(previousContext is not null);
 
-            return Context<TNewCursor, TNewUserData>.TryLoadFrom(previousContext, out ctx, selectContext);
+            return Context<TNewCursor, TNewUserData>.MatchOnceFrom(previousContext, out ctx, selectContext);
         }
 
         internal readonly Context<TNewCursor, TUserData> CastCursor<TNewCursor>()
             where TNewCursor : TCursor
-            => new((TNewCursor)Cursor, ref _user, TargetContextNode);
+        {
+            Debug.Assert(IsValid);
+            return new((TNewCursor)Cursor, ref _userRef, TargetContextNode);
+        }
 
         internal static bool IsContextTypeMatch(Cursor c, object? user, [NotNullWhen(true)] out TCursor? goodCursor)
         {
             if (c is TCursor cursor)
             {
                 goodCursor = cursor;
-                return typeof(TUserData) == typeof(object) || user is TUserData;
+
+                return typeof(TUserData) == typeof(object)
+                    || user == null // do not remove this line
+                    || user is TUserData;
+                // due to `TUserData` can be a class
+                // plus `user is TUserData?` is equivalent to `user is TUserData` until C# 14 with no diagnostics
+                // because the spec does not require `TUserData?` considered as a nullable reference type 
+                // such rules result in `null is TUserData?` surprisingly evaluate to `false` when `TUserData` is a class
             }
             else
             {
@@ -121,10 +145,11 @@ public partial class PInvokeGenerator
             }
         }
 
-        internal static bool TryLoadFrom(LinkedListNode<(Cursor Cursor, object? UserData)> contextNode,
+        internal static bool MatchOnceFrom(LinkedListNode<(Cursor Cursor, object? UserData)> contextNode,
             [MaybeNullWhen(false)] out Context<TCursor, TUserData> ctx,
-            Func<LinkedListNode<(Cursor Cursor, object? UserData)>, LinkedListNode<(Cursor Cursor, object? UserData)>>? selectContext = null)
+            SelectorFunc? selectContext = null)
         {
+            Debug.Assert(contextNode is not null);
             contextNode = selectContext?.Invoke(contextNode) ?? contextNode;
 
             var mappedCursor = contextNode.ValueRef.Cursor;
@@ -135,11 +160,41 @@ public partial class PInvokeGenerator
                 ctx = new(goodCursor, ref user, contextNode);
                 return true;
             }
-            else
+
+            ctx = default;
+            return false;
+        }
+
+        internal static bool MatchAllContextsFrom(LinkedListNode<(Cursor Cursor, object? UserData)> contextNode,
+            [MaybeNullWhen(false)] out Context<TCursor, TUserData> ctx,
+            SelectorFunc? selectContext = null)
+        {
+            LinkedListNode<(Cursor Cursor, object? UserData)>? circularCheckPrevNode = null;
+            var selectedNode = selectContext?.Invoke(contextNode) ?? contextNode;
+
+            while (selectedNode is not null)
             {
-                ctx = default;
-                return false;
+                if ((circularCheckPrevNode?.Value.Cursor ?? null) == selectedNode.ValueRef.Cursor)
+                {
+                    // Selector returned the node which does not
+                    // match the requirements since the last loop.
+                    // Restart the matching from the prev context node again. Or infinite loop will occur.
+                    circularCheckPrevNode = null;
+                    selectedNode = selectedNode.Previous;
+                    continue;
+                }
+
+                if (MatchOnceFrom(selectedNode, out ctx, null))
+                {
+                    return true;
+                }
+
+                circularCheckPrevNode = selectedNode;
+                selectedNode = selectContext?.Invoke(selectedNode);
             }
+
+            ctx = default;
+            return false;
         }
     }
 }

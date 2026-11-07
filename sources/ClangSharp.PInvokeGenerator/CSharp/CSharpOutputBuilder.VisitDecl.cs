@@ -30,8 +30,8 @@ internal partial class CSharpOutputBuilder : IOutputBuilder
         IsUncheckedContext = false;
     }
 
-    public void BeginFixedStatment() => Write("fixed (");
-    public void EndFixedStatment()
+    public void BeginFixedStatement() => Write("fixed (");
+    public void EndFixedStatement()
     {
         WriteLine(")");
         NeedsSemicolon = false;
@@ -284,7 +284,7 @@ internal partial class CSharpOutputBuilder : IOutputBuilder
             AddNativeTypeNameAttribute(desc.NativeType);
         }
 
-        if (desc.Location is {} location)
+        if (desc.Location is { } location)
         {
             WriteSourceLocation(location, false);
         }
@@ -475,7 +475,7 @@ internal partial class CSharpOutputBuilder : IOutputBuilder
             WriteLine(")]");
         }
 
-        if (desc.Location is {} location)
+        if (desc.Location is { } location)
         {
             WriteSourceLocation(location, false);
         }
@@ -822,7 +822,12 @@ internal partial class CSharpOutputBuilder : IOutputBuilder
             AddNativeAlignmentAttribute(desc.NativeAlignment.Value);
         }
 
-        if (desc.Location is {} location)
+        if (_generator.Config.GenerateNativeRecordLayoutDescAttribute)
+        {
+            AddNativeRecordLayoutDescAttribute(desc.Layout);
+        }
+
+        if (desc.Location is { } location)
         {
             WriteSourceLocation(location, false);
         }

@@ -8,15 +8,9 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using ClangSharp.Abstractions;
+using ClangSharp.Contexts;
 using ClangSharp.CSharp;
-using static ClangSharp.Interop.CX_CastKind;
-using static ClangSharp.Interop.CX_DeclKind;
-using static ClangSharp.Interop.CX_StmtClass;
-using static ClangSharp.Interop.CX_StorageClass;
-using static ClangSharp.Interop.CX_StringKind;
-using static ClangSharp.Interop.CX_UnaryExprOrTypeTrait;
-using static ClangSharp.Interop.CXUnaryOperatorKind;
-using static ClangSharp.Interop.CXEvalResultKind;
+using static ClangSharp.Interop.CX_AttrKind;
 using static ClangSharp.Interop.CXTypeKind;
 
 namespace ClangSharp;
@@ -39,12 +33,17 @@ public partial class PInvokeGenerator
         {
             var cxxRecordDecl = recordDecl as CXXRecordDecl;
             _cxxRecordDeclContext = cxxRecordDecl;
-
+            CxxRecordGenerationContextData? cxxRecordGenerationContext;
+            Context<CXXRecordDecl, CxxRecordGenerationContextData> cxxContext;
             var hasVtbl = false;
             var hasBaseVtbl = false;
 
             if (cxxRecordDecl is not null)
             {
+                cxxRecordGenerationContext = new(cxxRecordDecl);
+                var assertIsCxxContext = TryMatchMutableContext(out cxxContext);
+                Debug.Assert(assertIsCxxContext && cxxContext.IsValid);
+                cxxContext.UserData = cxxRecordGenerationContext;
                 hasVtbl = HasVtbl(cxxRecordDecl, out hasBaseVtbl);
 
                 if (HasVirtualBase(cxxRecordDecl))
@@ -52,9 +51,15 @@ public partial class PInvokeGenerator
                     AddDiagnostic(DiagnosticLevel.Warning, "Virtual inheritance is not currently modeled. The generated layout and vtable dispatch for this type may be incorrect.", cxxRecordDecl);
                 }
             }
+            else
+            {
+                cxxRecordGenerationContext = null;
+                cxxContext = default;
+            }
 
-            var alignment = Math.Max(recordDecl.TypeForDecl.Handle.AlignOf, 1);
-            var maxAlignm = recordDecl.Fields.Any() ? recordDecl.Fields.Max((fieldDecl) => Math.Max(fieldDecl.Type.Handle.AlignOf, 1)) : alignment;
+            var alignmentCx = Math.Max(recordDecl.TypeForDecl.Handle.AlignOf, 1);
+            var maxAlignm = recordDecl.Fields.Any() ? recordDecl.Fields.Max((fieldDecl) => Math.Max(fieldDecl.Type.Handle.AlignOf, 1)) : alignmentCx;
+            var isAbiDefaultPack = !recordDecl.Attrs.Any(a => a.Kind is CX_AttrKind_MaxFieldAlignment or CX_AttrKind_Packed);
 
             var isTopLevelStruct = _config.WithTypes.TryGetValue(StripNameEscape(name), out var withType) && withType.Equals("struct", StringComparison.Ordinal);
             var generateTestsClass = !recordDecl.IsAnonymousStructOrUnion && recordDecl.DeclContext is not RecordDecl;
@@ -201,7 +206,7 @@ public partial class PInvokeGenerator
 
             if (!TryGetRemappedValue(recordDecl, _config._withPackings, optOuts: null, out var pack))
             {
-                pack = alignment < maxAlignm ? alignment.ToString(CultureInfo.InvariantCulture) : null;
+                pack = alignmentCx < maxAlignm ? alignmentCx.ToString(CultureInfo.InvariantCulture) : null;
             }
 
             var requestedAlignment = (int)(recordDecl.MaxAlignment / 8);
@@ -216,6 +221,13 @@ public partial class PInvokeGenerator
                     nativeAlignment = requestedAlignment;
                     pack ??= requestedAlignment.ToString(CultureInfo.InvariantCulture);
                 }
+            }
+
+            // fallback to source overridden pack value
+            if (!isAbiDefaultPack && pack is null)
+            {
+                AddDiagnostic(DiagnosticLevel.Info, $"Struct '{name}' has specified a pack value. Its' Clang determined final alignment is '{alignmentCx}'.", recordDecl);
+                pack = alignmentCx.ToString(CultureInfo.InvariantCulture);
             }
 
             var desc = new StructDesc {
@@ -241,13 +253,10 @@ public partial class PInvokeGenerator
                 NativeAlignment = nativeAlignment,
                 Location = recordDecl.Location,
                 IsNested = recordDecl.DeclContext is TagDecl,
-                WriteCustomAttrs = static context => {
-                    (var recordDecl, var generator) = ((RecordDecl, PInvokeGenerator))context;
-
-                    generator.WithAttributes(recordDecl, emitGeneratedCodeAttribute: true);
-                    generator.WithUsings(recordDecl);
+                WriteCustomAttrs = _ => {
+                    WithAttributes(recordDecl, emitGeneratedCodeAttribute: true);
+                    WithUsings(recordDecl);
                 },
-                CustomAttrGeneratorData = (recordDecl, this),
             };
             Debug.Assert(_outputBuilder is not null);
 
@@ -305,6 +314,16 @@ public partial class PInvokeGenerator
                 {
                     withAttributes.Add($"NativeAlignment({desc.NativeAlignment.GetValueOrDefault().ToString(CultureInfo.InvariantCulture)})");
                     _ = withUsings.Add(GetNamespace("NativeAlignmentAttribute"));
+                }
+
+                if (_config.GenerateNativeRecordLayoutDescAttribute)
+                {
+                    var attrBuilder = new CSharpOutputBuilder($"NRLDA-{name}.temp.g.cs", this, indentationString: "");
+                    attrBuilder.AddNativeRecordLayoutDescAttribute(desc.Layout);
+                    attrBuilder.WritePendingLine();
+                    withAttributes.Add(attrBuilder.Contents.Single()[1..^1]);
+                    attrBuilder = null;
+                    _ = withUsings.Add(GetNamespace("NativeRecordLayoutDescAttribute"));
                 }
 
                 if (_config.GenerateSourceLocationAttribute && (desc.Location is not null))
@@ -610,7 +629,7 @@ public partial class PInvokeGenerator
 
             if (hasVtbl || hasBaseVtbl)
             {
-                Debug.Assert(cxxRecordDecl is not null);
+                Debug.Assert(cxxRecordDecl is not null && cxxContext.IsValid && cxxRecordGenerationContext is not null);
 
                 if (!_config.GenerateCompatibleCode)
                 {
@@ -622,7 +641,7 @@ public partial class PInvokeGenerator
                     _outputBuilder.EmitFnPtrSupport();
                 }
 
-                OutputVtblHelperMethods(cxxRecordDecl, cxxRecordDecl, new HashSet<string>(StringComparer.Ordinal));
+                OutputVtblHelperMethods(cxxRecordGenerationContext, cxxRecordDecl);
 
                 if (_config.GenerateMarkerInterfaces)
                 {
@@ -993,16 +1012,14 @@ public partial class PInvokeGenerator
                 VtblIndex = _config.GenerateVtblIndexAttribute ? cxxMethodDecl.VtblIndex : -1,
                 Location = cxxMethodDecl.Location,
                 HasBody = true,
-                WriteCustomAttrs = static context => {
-                    (var cxxMethodDecl, var generator) = ((CXXMethodDecl, PInvokeGenerator))context;
-
-                    generator.WithAttributes(cxxMethodDecl);
-                    generator.WithUsings(cxxMethodDecl);
-                },
-                CustomAttrGeneratorData = (cxxMethodDecl, this),
+                WriteCustomAttrs = _ => {
+                    WithAttributes(cxxMethodDecl);
+                    WithUsings(cxxMethodDecl);
+                }
             };
 
             var isUnsafe = true;
+            Debug.Assert(_outputBuilder is not null);
             _outputBuilder.BeginFunctionOrDelegate(in desc, ref isUnsafe);
 
             _outputBuilder.BeginFunctionInnerPrototype(in desc);
@@ -1019,10 +1036,11 @@ public partial class PInvokeGenerator
 
             if (_config.GenerateCompatibleCode)
             {
-                body.BeginFixedStatment();
+                body.BeginFixedStatement();
                 body.Write(escapedCXXRecordDeclName);
-                body.WriteLine("* pThis = &this");
-                body.EndFixedStatment();
+                body.Write("* pThis = &this");
+                body.EndFixedStatement();
+                body.WritePendingLine();
                 body.WriteBlockStart();
                 body.WriteIndentation();
             }
@@ -1205,21 +1223,32 @@ public partial class PInvokeGenerator
             _outputBuilder.EndFunctionOrDelegate(in desc);
         }
 
-        void OutputVtblHelperMethods(CXXRecordDecl rootCxxRecordDecl, CXXRecordDecl cxxRecordDecl, HashSet<string> emittedMemberNames)
+        void OutputVtblHelperMethods(CxxRecordGenerationContextData data, CXXRecordDecl cxxRecordDecl)
         {
             foreach (var vtblBase in EnumerateFlattenedVtblBases(cxxRecordDecl))
             {
-                OutputVtblHelperMethods(rootCxxRecordDecl, vtblBase, emittedMemberNames);
+                try
+                {
+                    OutputVtblHelperMethods(data, vtblBase);
+                }
+                finally
+                {
+                    // restore decl context
+                    data.CurrentMethodDeclContext = cxxRecordDecl;
+                }
             }
 
+            // push decl context
+            data.CurrentMethodDeclContext = cxxRecordDecl;
             var cxxMethodDecls = cxxRecordDecl.Methods;
 
             if (cxxMethodDecls.Count != 0)
             {
                 foreach (var cxxMethodDecl in cxxMethodDecls.OrderBy((cxxmd) => cxxmd.VtblIndex))
                 {
+                    Debug.Assert(_outputBuilder is not null);
                     _outputBuilder.WriteDivider();
-                    OutputVtblHelperMethod(rootCxxRecordDecl, cxxMethodDecl, emittedMemberNames);
+                    OutputVtblHelperMethod(data.RootRecordDecl, cxxMethodDecl, data.GeneratedMethodNames);
                 }
             }
         }
@@ -2015,11 +2044,12 @@ public partial class PInvokeGenerator
                     _outputBuilder.BeginGetter(_config.GenerateAggressiveInlining, isReadOnly: false);
                     var code = _outputBuilder.BeginCSharpCode();
 
-                    code.BeginFixedStatment();
+                    code.WriteIndentation();
+                    code.BeginFixedStatement();
                     code.Write(arrayTypeName);
                     code.Write("* pThis = &");
                     code.Write(firstFieldName);
-                    code.EndFixedStatment();
+                    code.EndFixedStatement();
                     code.WriteBlockStart();
                     code.WriteIndented("return ref pThis[index]");
                     code.WriteSemicolon();

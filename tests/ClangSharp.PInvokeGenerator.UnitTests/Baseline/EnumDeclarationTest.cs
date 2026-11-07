@@ -128,8 +128,7 @@ enum MyEnum2 : int
 };
 ";
 
-        var withAttributes = new Dictionary<string, IReadOnlyList<string>>
-        {
+        var withAttributes = new Dictionary<string, IReadOnlyList<string>> {
             ["MyEnum1"] = ["Flags"]
         };
         return ValidateAsync(nameof(WithAttributeTest), inputContents, withAttributes: withAttributes);
@@ -149,8 +148,7 @@ enum MyEnum2 : int
 };
 ";
 
-        var withNamespaces = new Dictionary<string, IReadOnlyList<string>>
-        {
+        var withNamespaces = new Dictionary<string, IReadOnlyList<string>> {
             ["MyEnum1"] = ["static ClangSharp.Test.MyEnum1"]
         };
         return ValidateAsync(nameof(WithNamespaceTest), inputContents, withUsings: withNamespaces);
@@ -170,8 +168,7 @@ enum MyEnum2 : int
 };
 ";
 
-        var withNamespaces = new Dictionary<string, IReadOnlyList<string>>
-        {
+        var withNamespaces = new Dictionary<string, IReadOnlyList<string>> {
             ["*"] = ["static ClangSharp.Test.MyEnum1"]
         };
         return ValidateAsync(nameof(WithNamespaceStarTest), inputContents, withUsings: withNamespaces);
@@ -191,8 +188,7 @@ enum MyEnum2 : int
 };
 ";
 
-        var withNamespaces = new Dictionary<string, IReadOnlyList<string>>
-        {
+        var withNamespaces = new Dictionary<string, IReadOnlyList<string>> {
             ["*"] = ["static ClangSharp.Test.MyEnum1"],
             ["MyEnum2"] = ["System"]
         };
@@ -272,8 +268,7 @@ enum MyEnum2 : int
 };
 ";
 
-        var withTypes = new Dictionary<string, string>
-        {
+        var withTypes = new Dictionary<string, string> {
             ["MyEnum"] = "uint"
         };
         return ValidateAsync(nameof(WithTypeAndImplicitConversionTest), inputContents, withTypes: withTypes);
@@ -293,8 +288,7 @@ enum MyEnum2 : int
 };
 ";
 
-        var withTypes = new Dictionary<string, string>
-        {
+        var withTypes = new Dictionary<string, string> {
             ["*"] = "uint"
         };
         return ValidateAsync(nameof(WithTypeStarTest), inputContents, withTypes: withTypes);
@@ -314,8 +308,7 @@ enum MyEnum2 : int
 };
 ";
 
-        var withTypes = new Dictionary<string, string>
-        {
+        var withTypes = new Dictionary<string, string> {
             ["*"] = "uint",
             ["MyEnum1"] = "int",
         };

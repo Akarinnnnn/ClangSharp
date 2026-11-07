@@ -25,7 +25,7 @@ namespace ClangSharp.Test
 
     /// <summary>Defines the type of a member as it was used in the native signature.</summary>
     [AttributeUsage(AttributeTargets.Struct | AttributeTargets.Enum | AttributeTargets.Property | AttributeTargets.Field | AttributeTargets.Parameter | AttributeTargets.ReturnValue, AllowMultiple = false, Inherited = true)]
-    [Conditional("DEBUG")]
+    [Conditional("CODE_ANALYSIS_CLANGSHARP")]
     internal sealed partial class NativeTypeNameAttribute : Attribute
     {
         private readonly string _name;
@@ -43,7 +43,7 @@ namespace ClangSharp.Test
 
     /// <summary>Defines the annotation found in a native declaration.</summary>
     [AttributeUsage(AttributeTargets.Struct | AttributeTargets.Enum | AttributeTargets.Property | AttributeTargets.Field | AttributeTargets.Parameter | AttributeTargets.ReturnValue, AllowMultiple = true, Inherited = false)]
-    [Conditional("DEBUG")]
+    [Conditional("CODE_ANALYSIS_CLANGSHARP")]
     internal sealed partial class NativeAnnotationAttribute : Attribute
     {
         private readonly string _annotation;

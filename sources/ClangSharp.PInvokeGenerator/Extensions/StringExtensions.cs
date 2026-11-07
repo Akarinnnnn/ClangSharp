@@ -30,8 +30,7 @@ internal static class StringExtensions
         _ => "public"
     };
 
-    public static string AsString(this CallConv value, bool isForFnPtr) => value switch
-    {
+    public static string AsString(this CallConv value, bool isForFnPtr) => value switch {
         CallConv.Winapi => "Winapi",
         CallConv.Cdecl => "Cdecl",
         CallConv.StdCall => isForFnPtr ? "Stdcall" : "StdCall",

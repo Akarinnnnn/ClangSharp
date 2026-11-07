@@ -916,7 +916,7 @@ int MyFunction()
 
         return ValidateAsync(nameof(NestedRecordDeclTest), inputContents);
     }
-    
+
     [Test]
     public Task CopyAssignmentOperatorTest()
     {

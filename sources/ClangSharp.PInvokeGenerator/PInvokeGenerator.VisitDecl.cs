@@ -8,6 +8,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using ClangSharp.Abstractions;
+using ClangSharp.Contexts;
 using ClangSharp.CSharp;
 using static ClangSharp.Interop.CX_CastKind;
 using static ClangSharp.Interop.CX_DeclKind;
@@ -16,7 +17,6 @@ using static ClangSharp.Interop.CX_StorageClass;
 using static ClangSharp.Interop.CX_StringKind;
 using static ClangSharp.Interop.CX_UnaryExprOrTypeTrait;
 using static ClangSharp.Interop.CXBinaryOperatorKind;
-using static ClangSharp.Interop.CXUnaryOperatorKind;
 using static ClangSharp.Interop.CXEvalResultKind;
 using static ClangSharp.Interop.CXTypeKind;
 using static ClangSharp.Interop.CXUnaryOperatorKind;
@@ -504,13 +504,10 @@ public partial class PInvokeGenerator
                     NativeType = nativeTypeName,
                     Location = enumDecl.Location,
                     IsNested = enumDecl.DeclContext is TagDecl,
-                    WriteCustomAttrs = static context => {
-                        (var enumDecl, var generator) = ((EnumDecl, PInvokeGenerator))context;
-
-                        generator.WithAttributes(enumDecl, emitGeneratedCodeAttribute: true);
-                        generator.WithUsings(enumDecl);
-                    },
-                    CustomAttrGeneratorData = (enumDecl, this),
+                    WriteCustomAttrs = _ => {
+                        WithAttributes(enumDecl, emitGeneratedCodeAttribute: true);
+                        WithUsings(enumDecl);
+                    }
                 };
 
                 _outputBuilder.BeginEnum(in desc);
@@ -611,22 +608,17 @@ public partial class PInvokeGenerator
             return;
         }
 
-        if (IsCurrentFunctionBodyGenerated(functionDecl))
+        var cxxMethodDecl = functionDecl as CXXMethodDecl;
+        var cxxRecordDecl = functionDecl.DeclContext as CXXRecordDecl;
+
+        if (IsFunctionBodyGenerated(functionDecl))
         {
-            AddDiagnostic(DiagnosticLevel.Info, $"Function body (mangled name: {GetCursorMangledName(functionDecl)})" +
-                $" has alreday been generated. Skipping.", functionDecl);
+            Debug.WriteLine($"Function body of '{GetCursorMangledName(functionDecl)}' in decl context '{functionDecl.DeclContext}' is generated. Skipping.");
             return;
-        }
-        else
-        {
-            var added = _bodyEmittedFunctionMangledNames.Add(GetCursorMangledName(functionDecl));
-            Debug.Assert(added, $"Function {GetCursorMangledName(functionDecl)} has been already added to generated set, but predcate reported false. " +
-                $"Location: {functionDecl.Location.ToString().NormalizePath()}");
         }
 
         var name = GetRemappedCursorName(functionDecl);
 
-        var cxxMethodDecl = functionDecl as CXXMethodDecl;
         uint overloadCount = 0;
 
         if (cxxMethodDecl is not null and CXXConstructorDecl)
@@ -646,7 +638,6 @@ public partial class PInvokeGenerator
         var className = name;
         var parentName = "";
 
-        var cxxRecordDecl = functionDecl.DeclContext as CXXRecordDecl;
 
         if (cxxRecordDecl is null)
         {
@@ -741,18 +732,15 @@ public partial class PInvokeGenerator
             IsCxxConstructor = functionDecl is CXXConstructorDecl,
             Location = functionDecl.Location,
             HasBody = body is not null,
-            WriteCustomAttrs = static context => {
-                (var functionDecl, var outputBuilder, var generator) = ((FunctionDecl, IOutputBuilder, PInvokeGenerator))context;
+            WriteCustomAttrs = _ => {
+                WithAttributes(functionDecl);
+                WithUsings(functionDecl);
 
-                generator.WithAttributes(functionDecl);
-                generator.WithUsings(functionDecl);
-
-                if (generator.HasSuppressGCTransition(functionDecl))
+                if (HasSuppressGCTransition(functionDecl))
                 {
-                    outputBuilder.WriteCustomAttribute("SuppressGCTransition");
+                    _outputBuilder!.WriteCustomAttribute("SuppressGCTransition");
                 }
             },
-            CustomAttrGeneratorData = (functionDecl, _outputBuilder, this),
             ParameterTypes = overloadCount > 1 ? [.. functionDecl.Parameters.Select(param => GetTargetTypeName(param, out var _))] : null,
         };
         Debug.Assert(_outputBuilder is not null);
@@ -931,11 +919,49 @@ public partial class PInvokeGenerator
 
         _outputBuilder.EndFunctionOrDelegate(in desc);
 
-        Visit(functionDecl.Decls, excludedCursors: functionDecl.Parameters);
+        Visit(functionDecl.Decls.OfType<RecordDecl>(), excludedCursors: functionDecl.Parameters);
 
         if (cxxRecordDecl is null)
         {
             StopUsingOutputBuilder();
+        }
+
+        bool IsFunctionBodyGenerated(FunctionDecl funcDecl)
+        {
+            if (funcDecl.DeclContext is { IsNamespace: true } or { IsTranslationUnit: true } or LinkageSpecDecl)
+            {
+                var globalFunctionGenerated = _globalBodyEmittedFunctionMangledNames.Contains(GetCursorMangledName(funcDecl));
+                if (globalFunctionGenerated)
+                {
+                    AddDiagnostic(DiagnosticLevel.Info, $"Global function with body (mangled name: {GetCursorMangledName(functionDecl)})" +
+                        $" has already been generated. Skipping.", functionDecl);
+                }
+                return globalFunctionGenerated;
+            }
+            else if (funcDecl is CXXMethodDecl cxxMethod)
+            {
+                var rootCxxRecordCtxFound = TryMatchMutableContext(out Context<CXXRecordDecl, CxxRecordGenerationContextData> ctx,
+                    (ctxNode) => {
+                        while (ctxNode.ValueRef.Cursor != _cxxRecordDeclContext)
+                        {
+                            Debug.Assert(ctxNode.Previous is not null);
+                            ctxNode = ctxNode.Previous;
+                        }
+
+                        return ctxNode;
+                    });
+                Debug.Assert(rootCxxRecordCtxFound && ctx.HasValue);
+
+                return !ctx.UserData.MarkMethodGenerated(cxxMethod, this);
+            }
+            else
+            {
+                var message = $"Skipped function '{funcDecl.Name}', it's not declared in TranslationUnit or Namespace, nor a CxxMethod." +
+                    $" Generation may not complete.";
+                Debug.Assert(false, message);
+                AddDiagnostic(DiagnosticLevel.Warning, message, funcDecl);
+                return true;
+            }
         }
 
         void VisitCtorInitializers(CXXConstructorDecl cxxConstructorDecl, int firstCtorInitializer, int lastCtorInitializer)
@@ -986,7 +1012,7 @@ public partial class PInvokeGenerator
 
                 {
                     using ContextScope ctxScope = new(cxxConstructorDecl, skipInitializer, this);
-                UncheckStmt(memberRefTypeName, memberInit);
+                    UncheckStmt(memberRefTypeName, memberInit);
                 }
 
                 if (!skipInitializer)
@@ -1181,11 +1207,12 @@ public partial class PInvokeGenerator
         }
         else if (generateCompatibleCode)
         {
-            code.BeginFixedStatment();
+            code.WriteIndentation();
+            code.BeginFixedStatement();
             code.Write(contextType);
             code.Write("* pField = &");
             code.Write(contextName);
-            code.EndFixedStatment();
+            code.EndFixedStatement();
             code.WriteBlockStart();
             code.WriteIndented("return ref pField->");
             code.Write(escapedName);

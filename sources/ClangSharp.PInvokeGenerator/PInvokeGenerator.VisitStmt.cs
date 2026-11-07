@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -10,15 +11,15 @@ using System.Runtime.InteropServices;
 using System.Text;
 using ClangSharp.Abstractions;
 using ClangSharp.CSharp;
-using static ClangSharp.Interop.CXBinaryOperatorKind;
 using static ClangSharp.Interop.CX_CastKind;
 using static ClangSharp.Interop.CX_CharacterKind;
 using static ClangSharp.Interop.CX_StmtClass;
 using static ClangSharp.Interop.CX_StringKind;
 using static ClangSharp.Interop.CX_UnaryExprOrTypeTrait;
-using static ClangSharp.Interop.CXUnaryOperatorKind;
+using static ClangSharp.Interop.CXBinaryOperatorKind;
 using static ClangSharp.Interop.CXEvalResultKind;
 using static ClangSharp.Interop.CXTypeKind;
+using static ClangSharp.Interop.CXUnaryOperatorKind;
 
 namespace ClangSharp;
 
@@ -60,7 +61,12 @@ public partial class PInvokeGenerator
         var assignmentRhsIsIntegralNarrowingCast = binaryOperator.IsAssignmentOp
             && IsIntegralNarrowingCastStmt(binaryOperator.RHS);
 
-        VisitBinaryOperatorOperand(binaryOperator.LHS, isAdditive, isLogical, isIntegralOperatesEnum);
+        var rhsIsNullOperand = IsNullOperand(binaryOperator.RHS);
+        var lhsIsNullOperand = IsNullOperand(binaryOperator.LHS);
+
+        var isBinaryOpsIntegralSignMixed = IsBinaryOpsIntegralSignMixed(binaryOperator);
+
+        VisitBinaryOperatorOperand(binaryOperator.LHS, isAdditive, isLogical, lhsIsNullOperand, isIntegralOperatesEnum);
         outputBuilder.Write(' ');
         outputBuilder.Write(binaryOperator.OpcodeStr);
         outputBuilder.Write(' ');
@@ -115,14 +121,14 @@ public partial class PInvokeGenerator
         }
         else
         {
-            VisitBinaryOperatorOperand(binaryOperator.RHS, isAdditive, isLogical,
-                isIntegralOperatesEnum || assignmentRhsIsIntegralNarrowingCast);
+            VisitBinaryOperatorOperand(binaryOperator.RHS, isAdditive, isLogical, rhsIsNullOperand,
+                isIntegralOperatesEnum || assignmentRhsIsIntegralNarrowingCast || isBinaryOpsIntegralSignMixed);
         }
 
         StopCSharpCode();
     }
 
-    private void VisitBinaryOperatorOperand(Expr operand, bool isAdditive, bool isLogical, bool isCSharpCastRequired)
+    private void VisitBinaryOperatorOperand(Expr operand, bool isAdditive, bool isLogical, bool isNullOperand, bool isCSharpCastRequired)
     {
         if (isAdditive && IsTypeVoidPointer(operand, operand.Type))
         {
@@ -131,13 +137,13 @@ public partial class PInvokeGenerator
         }
 
         // following branches looking bad... refactors needed
-        if (!isCSharpCastRequired && !isLogical && (operand.IgnoreParens is ImplicitCastExpr))
+        if (!isNullOperand && !isCSharpCastRequired && !isLogical && (operand.IgnoreParens is ImplicitCastExpr))
         {
             Visit(GetExprAsWritten(operand, false));
             return;
         }
 
-        if (isLogical && (operand.IgnoreParens is ImplicitCastExpr cast) && (cast.CastKind is CX_CK_IntegralCast or CX_CK_BooleanToSignedIntegral)
+        if (!isNullOperand && isLogical && (operand.IgnoreParens is ImplicitCastExpr cast) && (cast.CastKind is CX_CK_IntegralCast or CX_CK_BooleanToSignedIntegral)
                 && (cast.SubExprAsWritten.Type.CanonicalType.Kind == CXType_Bool))
         {
             Visit(GetExprAsWritten(operand, false));
@@ -1544,11 +1550,12 @@ public partial class PInvokeGenerator
                 {
                     ForEnumDecl(implicitCastExpr);
                 }
-                else if (implicitCastExpr.CastKind is CX_CK_IntegralCast)
-                {
-                    // unlike C++, C# does not implicitly apply narrowing cast
-                    EmitParenthesizedExpression(implicitCastExpr, outputBuilder, subExpr.IgnoreParens);
-                }
+                // TODO need to reconsider fixes
+                //else if (implicitCastExpr.CastKind is CX_CK_IntegralCast && implicitCastExpr.SubExprAsWritten.Type.SizeOf > implicitCastExpr.Type.SizeOf)
+                //{
+                //    // unlike C++, C# does not implicitly apply narrowing cast
+                //    EmitParenthesizedExpression(implicitCastExpr, outputBuilder, subExpr.IgnoreParens);
+                //}
                 else
                 {
                     // A constant-array field decayed to a pointer projects to an `[InlineArray]`
@@ -1590,15 +1597,15 @@ public partial class PInvokeGenerator
             else if (TryMatchPrevStmtContext<CaseStmt, object>(out var ctx))
             {
                 if (ctx.TryMatchPreviousContexts<SwitchStmt, object>(out var switchCtx, previousContext => {
-                do
-                {
+                    do
+                    {
                         previousContext = previousContext.Previous!;
-                    Debug.Assert(previousContext is not null);
-                }
-                while (previousContext.Value.Cursor is ParenExpr or ImplicitCastExpr or CaseStmt or CompoundStmt);
+                        Debug.Assert(previousContext is not null);
+                    }
+                    while (previousContext.Value.Cursor is ParenExpr or ImplicitCastExpr or CaseStmt or CompoundStmt);
 
                     return previousContext;
-                }) && IsType<EnumType>(switchCtx.Cursor.Cond.IgnoreImplicit))
+                }) && switchCtx.IsValid && IsType<EnumType>(switchCtx.Cursor.Cond.IgnoreImplicit))
                 {
                     Visit(subExpr);
                     subExpr = null;
@@ -2409,6 +2416,11 @@ public partial class PInvokeGenerator
 
         if (IsPrevContextDecl<FunctionDecl>(out var functionDecl, out _) && !IsTypeVoid(functionDecl, functionDecl.ReturnType))
         {
+            var currentCtxIsRetStmt = TryMatchMutableContext<ReturnStmt, FunctionDecl>(out var returnStmtCtx);
+            Debug.Assert(currentCtxIsRetStmt);
+
+            returnStmtCtx.UserData = functionDecl;
+
             outputBuilder.Write("return");
             var retValue = returnStmt.RetValue;
 

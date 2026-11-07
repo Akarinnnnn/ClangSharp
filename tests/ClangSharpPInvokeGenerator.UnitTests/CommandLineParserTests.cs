@@ -203,4 +203,25 @@ public sealed class CommandLineParserTests
         Assert.That(parser.Errors, Has.Count.EqualTo(1));
         Assert.That(parser.Errors[0], Does.Contain("Response file not found"));
     }
+
+    [Test]
+    public void SuppressHelpHasPriority()
+    {
+        var parser = new CommandLineParser([]);
+        parser.Parse([CommandLineParser.HelpSuppressionOptionName]);
+
+        Assert.That(parser.SuppressHelpOnError, Is.True);
+
+        parser = new([]);
+        parser.Parse(["--error-arg"]);
+        Assert.That(parser.SuppressHelpOnError, Is.False);
+
+        parser = new([]);
+        parser.Parse(["--error-arg", CommandLineParser.HelpSuppressionOptionName]);
+        Assert.That(parser.SuppressHelpOnError, Is.True);
+
+        parser = new([]);
+        parser.Parse([CommandLineParser.HelpSuppressionOptionName, "--error-arg"]);
+        Assert.That(parser.SuppressHelpOnError, Is.True);
+    }
 }

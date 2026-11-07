@@ -28,7 +28,8 @@ internal static partial class Program
     private const string Wildcards = "Many name-matching options accept glob patterns using `*` (matches any run of characters, including qualification separators) and `?` (matches a single character); `::` and `.` are treated as equivalent separators and matching is case-sensitive. An exact match always wins over a glob, and among globs the most specific (the most literal characters) wins. Many `--with-*` options also accept a bare `*` as a catch-all that applies a rule to everything; for value options it is written `*=value` (e.g. --with-access-specifier *=Internal makes all generated code internal). Each such option has a paired `--without-<name>` option that opts a specific declaration (by exact name or glob) back out of its `*` catch-all (e.g. --with-access-specifier *=Internal --without-access-specifier Foo). To opt everything in and exclude piecemeal, use the include (-i) and exclude (-e) options together; they are already an opt-in/opt-out pair and likewise accept globs.";
 
     private const string MoreInfoTitle = "More information:";
-    private const string MoreInfo = "See https://github.com/dotnet/ClangSharp/blob/main/docs/generating-bindings-best-practices.md for a guide on structuring a generation project and using these options.";
+    private const string MoreInfo = "See https://github.com/dotnet/ClangSharp/blob/main/docs/generating-bindings-best-practices.md for a guide on structuring a generation project and using these options.\n"
+        + $"Option {CommandLineParser.HelpSuppressionOptionName} is useful to suppress this message when you are debugging with response files.";
 
     // Canonical boolean `-c` switches. `Inverted` means the underlying flag records the *opposite*
     // of the switch's sense, so `generate-x=false` sets the flag (the legacy `exclude-*`/`dont-*`
@@ -48,6 +49,7 @@ internal static partial class Program
         ["generate-macro-bindings"] = (GenerateMacroBindings, false),
         ["generate-marker-interfaces"] = (GenerateMarkerInterfaces, false),
         ["generate-native-alignment-attribute"] = (GenerateNativeAlignmentAttribute, false),
+        ["generate-native-record-layout-desc-attribute"] = (GenerateNativeRecordLayoutDescAttribute, false),
         ["generate-native-bitfield-attribute"] = (GenerateNativeBitfieldAttribute, false),
         ["generate-native-inheritance-attribute"] = (GenerateNativeInheritanceAttribute, false),
         ["generate-generic-pointer-wrapper"] = (GenerateGenericPointerWrapper, false),

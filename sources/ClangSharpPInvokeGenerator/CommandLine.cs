@@ -68,6 +68,7 @@ internal readonly struct HelpRow(string term, string description)
 internal sealed class CommandLineParser
 {
     private const int MaxResponseFileDepth = 32;
+    internal const string HelpSuppressionOptionName = "--suppress-help-on-error";
 
     private readonly IReadOnlyList<CommandLineOption> _options;
     private readonly Dictionary<string, CommandLineOption> _optionsByAlias;
@@ -77,13 +78,17 @@ internal sealed class CommandLineParser
 
     public CommandLineParser(IReadOnlyList<CommandLineOption> options)
     {
-        _options = options;
+        _options = [..options,
+            new CommandLineOption([HelpSuppressionOptionName], "Suppress help messages from being printed when commandline tokens containing error. "
+                + "Useful when you are debugging with response files if you are familiar with commandline usages.",
+                CommandLineOptionKind.Flag)
+            ];
         _optionsByAlias = new Dictionary<string, CommandLineOption>(StringComparer.Ordinal);
         _deprecatedAliases = new HashSet<string>(StringComparer.Ordinal);
         _errors = [];
         _warnings = [];
 
-        foreach (var option in options)
+        foreach (var option in _options)
         {
             foreach (var alias in option.Aliases)
             {
@@ -101,6 +106,11 @@ internal sealed class CommandLineParser
     public IReadOnlyList<string> Errors => _errors;
 
     public IReadOnlyList<string> Warnings => _warnings;
+
+    // `--suppress-help-on-error`, users can set the flag (typically in response file)
+    // when they already knew the command line usages. help messages make tons of noise to
+    // find out real error message
+    public bool SuppressHelpOnError { get; private set; }
 
     public void Parse(IReadOnlyList<string> args)
     {
@@ -138,6 +148,13 @@ internal sealed class CommandLineParser
                 {
                     _errors.Add($"Error: Option '{option.CanonicalName}' does not accept an argument.");
                 }
+
+                // special handling of help suppression
+                if (option.CanonicalName == HelpSuppressionOptionName)
+                {
+                    SuppressHelpOnError = true;
+                }
+
                 continue;
             }
 
@@ -267,6 +284,12 @@ internal sealed class CommandLineParser
 
     public void WriteHelp(TextWriter writer, string name, string description, string epilogTitle, string epilog, string moreInfoTitle, string moreInfo)
     {
+        if (SuppressHelpOnError)
+        {
+            Console.WriteLine($"Help messages are suppessed by commandline option {HelpSuppressionOptionName} .");
+            return;
+        }
+
         writer.WriteLine(name);
         writer.WriteLine($"  {description}");
         writer.WriteLine();

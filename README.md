@@ -13,7 +13,7 @@ A convenience package which provides the native libClang library for several pla
 
 A helper package which exposes many Clang APIs missing from libClang is provided here: https://www.nuget.org/packages/libClangSharp
 
-**NOTE:** libclang and libClangSharp are meta-packages which point to the platform-specific runtime packages ([e.g.](https://www.nuget.org/packages/libClangSharp.runtime.win-x64/22.1.8); see others owned by [tannergooding](https://www.nuget.org/profiles/tannergooding)). Several manual steps may be required to use them, see discussion in [#46](https://github.com/dotnet/ClangSharp/issues/46) and [#118](https://github.com/dotnet/ClangSharp/issues/118).
+**NOTE:** libclang and libClangSharp are meta-packages which point to the platform-specific runtime packages ([e.g.](https://www.nuget.org/packages/libClangSharp.runtime.win-x64/23.1.5.0); see others owned by [tannergooding](https://www.nuget.org/profiles/tannergooding)). Several manual steps may be required to use them, see discussion in [#46](https://github.com/dotnet/ClangSharp/issues/46) and [#118](https://github.com/dotnet/ClangSharp/issues/118).
 
 Source browsing is available via: https://source.clangsharp.dev/
 
@@ -59,6 +59,10 @@ See [LICENSE.md](LICENSE.md) in the repository root for more information.
 
 ClangSharp requires the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) and can be built simply with `dotnet build -c Release`.
 
+The managed libraries and generator target LLVM 23.1.5 and use the matching `libClang` 23.1.5 and `libClangSharp` 23.1.5.0 runtime packages.
+
+To regenerate the managed interop bindings, run the generator from the repository root with `sources/ClangSharpPInvokeGenerator/Properties/GenerateClang.rsp` or `GenerateClangSharp.rsp`. Use the matching LLVM release's headers (including its generated headers) as `--include-directory`, and set `--file-directory` to that include directory for libClang or to `sources` for libClangSharp. For libClangSharp, also include the native build directory containing `ClangSharp_export.h`. The response files write to `sources/ClangSharp.Interop/clang` and `sources/ClangSharp.Interop/clangsharp`, respectively.
+
 You can reproduce what the CI environment does by running `./scripts/cibuild.cmd` on Windows or `./scripts.cibuild.sh` on Unix.
 This will download the required .NET SDK locally and use that to build the repo; it will also run through all available actions in the appropriate order.
 
@@ -79,7 +83,7 @@ To successfully build `libClangSharp` you must first build Clang (https://clang.
 
 The process done on Windows is roughly:
 ```cmd
-git clone --single-branch --branch llvmorg-22.1.8 https://github.com/llvm/llvm-project
+git clone --single-branch --branch llvmorg-23.1.5 https://github.com/llvm/llvm-project
 cd llvm-project
 mkdir artifacts/bin
 cd artifacts/bin
@@ -103,7 +107,7 @@ You can then open `libClangSharp.slnx` in Visual Studio, change the configuratio
 
 The process done on Linux is roughly:
 ```bash
-git clone --single-branch --branch llvmorg-22.1.8 https://github.com/llvm/llvm-project
+git clone --single-branch --branch llvmorg-23.1.5 https://github.com/llvm/llvm-project
 cd llvm-project
 mkdir -p artifacts/bin
 cd artifacts/bin
@@ -150,6 +154,8 @@ The change-detection and version-verification the workflow gates on live in the 
 
 The staged binary is written to `artifacts/native/<rid>/`. The LLVM release distribution bundles both the prebuilt `libclang` and the `lib/cmake/{llvm,clang}` config, headers, and import libraries used as `PATH_TO_LLVM` when building `libClangSharp`, so no from-source LLVM build is required (the manual [Building Native](#building-native) steps remain the way to reproduce a build locally). Because lifting `libclang` is just unpacking prebuilt binaries, the workflow does all five runtimes on a single Windows runner (its bundled `bsdtar` handles `.tar.xz`); `libClangSharp` is compiled per-runtime on native runners.
 
+The Windows native helper builds install zlib and zstd with vcpkg to satisfy the LLVM CMake package dependencies, and use the active Visual Studio installation's DIA SDK.
+
 The `win-arm64` runtime is compiled with the LLVM release's own `clang-cl` (via `-G Ninja`) rather than MSVC. The official LLVM binaries are clang-built, and on Arm64 clang and MSVC disagree on the record layout of over-aligned non-POD base classes (e.g. `clang::TemplateSpecializationType`), so an MSVC-built shim reads members of clang-built types at the wrong offset. The other runtimes are unaffected (`win-x64` layouts agree between the two, and the Unix runtimes already use clang).
 
 The jobs run when:
@@ -157,7 +163,7 @@ The jobs run when:
 * **libclang** — the tracked LLVM major/minor version changes, or the workflow is dispatched manually with the `libclang` input set.
 * **libClangSharp** — the same LLVM version change, or anything under `sources/libClangSharp/` changes, or the workflow is dispatched manually with the `libclangsharp` input set.
 
-Before anything is downloaded, the workflow verifies the `packages/**/*.nuspec` and `packages/**/runtime.json` versions match the tracked LLVM version (libclang exactly; libClangSharp as `<llvm-version>.<revision>`), so a version bump that forgot to update a package fails fast. Each job uploads the resulting `.nupkg` files as build artifacts and signs them; publishing them to NuGet.org is a manual step. To move to a new LLVM release, bump the version in `CMakeLists.txt` alongside the `<version>` in the affected `packages/**/*.nuspec` files (and the versions in `packages/**/runtime.json` and this README); pushing that change regenerates the packages.
+Before anything is downloaded, the workflow verifies the `packages/**/*.nuspec` and `packages/**/runtime.json` versions match the tracked LLVM version (libclang exactly; libClangSharp as `<llvm-version>.<revision>`), so a version bump that forgot to update a package fails fast. Each job uploads the resulting `.nupkg` files as build artifacts. Push-triggered runs sign them automatically; manually dispatched runs can opt in to signing. Publishing them to NuGet.org is a manual step. To move to a new LLVM release, bump the version in `CMakeLists.txt` alongside the `<version>` in the affected `packages/**/*.nuspec` files (and the versions in `packages/**/runtime.json` and this README); pushing that change regenerates the packages.
 
 ### Generating Bindings
 

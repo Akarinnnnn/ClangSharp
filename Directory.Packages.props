@@ -13,9 +13,9 @@
   </PropertyGroup>
   <!-- Package versions for package references across all projects -->
   <ItemGroup>
-    <PackageVersion Include="DiffPlex" Version="1.9.0" />
-    <PackageVersion Include="libClang" Version="22.1.8" />
-    <PackageVersion Include="libClangSharp" Version="22.1.8.2" />
+    <PackageVersion Include="libClang" Version="23.1.5" />
+    <PackageVersion Include="libClangSharp" Version="23.1.5.0" />
+
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="$(MTPVersion)" />
     <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="$(MTPVersion)" />
     <PackageVersion Include="NUnit" Version="5.0.0" />
